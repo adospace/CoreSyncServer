@@ -26,6 +26,8 @@ public abstract class DataStore
     public DataStoreType Type { get; set; }
 
     public IList<DataStoreConfiguration> Configurations { get; set; } = [];
+
+    public IList<SyncSession> SyncSessions { get; set; } = [];
 }
 
 public class SqliteDataStore : DataStore

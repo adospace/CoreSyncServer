@@ -15,7 +15,7 @@
             <p class="text-gray-500 mt-1">Manage application users and their accounts.</p>
         </div>
         <button @onclick="OpenCreateDialog"
-                class="bg-verdigris-500 hover:bg-verdigris-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+                class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
             <span class="i-lucide-plus size-4"></span>
             Add User
         </button>
@@ -53,7 +53,7 @@
                             <tr class="hover:bg-gray-50/50 transition-colors">
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-charcoal-blue-500 flex items-center justify-center text-white text-xs font-medium">
+                                        <div class="w-8 h-8 rounded-full bg-prussian-blue-500 flex items-center justify-center text-white text-xs font-medium">
                                             @(user.UserName?.Length > 0 ? user.UserName[..1].ToUpper() : "?")
                                         </div>
                                         <span class="text-sm font-medium text-gray-900">@user.UserName</span>
@@ -63,14 +63,14 @@
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex items-center justify-end gap-1">
                                         <button @onclick="() => OpenEditDialog(user)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-verdigris-500 hover:bg-gray-100 transition-colors"
+                                                class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
                                                 title="Edit user">
                                             <span class="i-lucide-pencil size-4"></span>
                                         </button>
                                         @if (user.Id != currentUserId)
                                         {
                                             <button @onclick="() => OpenDeleteDialog(user)"
-                                                    class="p-2 rounded-lg text-gray-400 hover:text-burnt-peach-500 hover:bg-gray-100 transition-colors"
+                                                    class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
                                                     title="Delete user">
                                                 <span class="i-lucide-trash-2 size-4"></span>
                                             </button>
@@ -96,8 +96,8 @@
             {
                 <div class="p-6">
                     <div class="flex items-center gap-3 mb-4">
-                        <div class="w-10 h-10 rounded-lg bg-burnt-peach-900 flex items-center justify-center">
-                            <span class="i-lucide-alert-triangle size-5 text-burnt-peach-500"></span>
+                        <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
+                            <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
                         </div>
                         <h2 class="text-lg font-semibold text-gray-900">Delete User</h2>
                     </div>
@@ -107,10 +107,10 @@
 
                     @if (errorMessages.Count > 0)
                     {
-                        <div class="mb-4 p-3 bg-burnt-peach-900 border border-burnt-peach-700 rounded-lg">
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
                             @foreach (var error in errorMessages)
                             {
-                                <p class="text-sm text-burnt-peach-500">@error</p>
+                                <p class="text-sm text-ink-black-500">@error</p>
                             }
                         </div>
                     }
@@ -121,7 +121,7 @@
                             Cancel
                         </button>
                         <button @onclick="DeleteUser" disabled="@isSaving"
-                                class="px-4 py-2 text-sm font-medium text-white bg-burnt-peach-500 hover:bg-burnt-peach-400 rounded-lg transition-colors disabled:opacity-50">
+                                class="px-4 py-2 text-sm font-medium text-white bg-ink-black-500 hover:bg-ink-black-400 rounded-lg transition-colors disabled:opacity-50">
                             @(isSaving ? "Deleting..." : "Delete")
                         </button>
                     </div>
@@ -131,8 +131,8 @@
             {
                 <div class="p-6">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="w-10 h-10 rounded-lg bg-verdigris-900 flex items-center justify-center">
-                            <span class="i-lucide-user-plus size-5 text-verdigris-500"></span>
+                        <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                            <span class="i-lucide-user-plus size-5 text-dusk-blue-500"></span>
                         </div>
                         <h2 class="text-lg font-semibold text-gray-900">
                             @(dialogMode == DialogMode.Create ? "Add User" : "Edit User")
@@ -141,10 +141,10 @@
 
                     @if (errorMessages.Count > 0)
                     {
-                        <div class="mb-4 p-3 bg-burnt-peach-900 border border-burnt-peach-700 rounded-lg">
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
                             @foreach (var error in errorMessages)
                             {
-                                <p class="text-sm text-burnt-peach-500">@error</p>
+                                <p class="text-sm text-ink-black-500">@error</p>
                             }
                         </div>
                     }
@@ -153,19 +153,19 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
                             <input type="text" @bind="formUserName" placeholder="Enter username"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
                             <input type="email" @bind="formEmail" placeholder="user@example.com"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                         </div>
                         @if (dialogMode == DialogMode.Create)
                         {
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
                                 <input type="password" @bind="formPassword" placeholder="Enter password"
-                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                             </div>
                         }
                     </div>
@@ -176,7 +176,7 @@
                             Cancel
                         </button>
                         <button @onclick="SaveUser" disabled="@isSaving"
-                                class="px-4 py-2 text-sm font-medium text-white bg-verdigris-500 hover:bg-verdigris-600 rounded-lg transition-colors disabled:opacity-50">
+                                class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
                             @if (isSaving)
                             {
                                 <span>Saving...</span>

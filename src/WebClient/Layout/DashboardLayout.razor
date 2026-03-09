@@ -10,12 +10,10 @@
 
     @* Sidebar *@
     <aside id="sidebar"
-           class="fixed inset-y-0 left-0 z-30 w-64 bg-charcoal-blue-500 flex flex-col transform transition-transform duration-200 ease-in-out -translate-x-full md:translate-x-0">
+           class="fixed inset-y-0 left-0 z-30 w-64 bg-prussian-blue-500 flex flex-col transform transition-transform duration-200 ease-in-out -translate-x-full md:translate-x-0">
         @* Logo / Brand *@
-        <div class="flex items-center gap-3 px-6 py-5 border-b border-charcoal-blue-400">
-            <div class="w-8 h-8 rounded-lg bg-verdigris-500 flex items-center justify-center">
-                <span class="text-white font-bold text-sm">CS</span>
-            </div>
+        <div class="h-16 flex items-center gap-3 px-6 shrink-0 border-b border-prussian-blue-400">
+            <img src="icons/core-sync-server-36.png" alt="CoreSync" class="size-9" />
             <span class="text-lg font-semibold text-white">CoreSync</span>
         </div>
 
@@ -28,7 +26,7 @@
         </nav>
 
         @* Settings at bottom *@
-        <div class="px-3 py-4 border-t border-charcoal-blue-400">
+        <div class="h-16 flex items-center px-3 shrink-0 border-t border-prussian-blue-400">
             <SidebarNavItem Href="/settings" Label="Settings" IconClass="i-lucide-settings" />
         </div>
     </aside>
