@@ -1,0 +1,13 @@
+{
+  "name": "coresynserver",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i Styles/app.css -o wwwroot/app.css --minify",
+    "css:watch": "tailwindcss -i Styles/app.css -o wwwroot/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.1",
+    "tailwindcss": "^4.2.1"
+  }
+}

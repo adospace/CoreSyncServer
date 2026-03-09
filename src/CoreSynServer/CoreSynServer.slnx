@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../CoreSyncServer.Services/CoreSyncServer.Services.csproj" />
+  <Project Path="CoreSynServer.Client/CoreSynServer.Client.csproj" />
+  <Project Path="CoreSynServer/CoreSynServer.csproj" />
+</Solution>

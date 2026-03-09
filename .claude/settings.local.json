@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(cs|razor|cshtml|json|css|scss|xml\\)$\")",
+      "Bash(npm init -y)",
+      "Bash(npm install -D tailwindcss @tailwindcss/cli)",
+      "Bash(npx @tailwindcss/cli -i Styles/app.css -o wwwroot/app.css --minify)"
+    ]
+  }
+}
