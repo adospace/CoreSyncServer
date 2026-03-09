@@ -31,6 +31,8 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+builder.Services.AddHostedService<MigrationHostedService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
