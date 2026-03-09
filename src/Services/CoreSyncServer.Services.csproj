@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CoreSync" Version="0.1.126" />
+    <PackageReference Include="CoreSync.PostgreSQL" Version="0.1.126" />
+    <PackageReference Include="CoreSync.Sqlite" Version="0.1.126" />
+    <PackageReference Include="CoreSync.SqlServer" Version="0.1.126" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
   </ItemGroup>
