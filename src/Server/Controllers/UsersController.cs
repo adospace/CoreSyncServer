@@ -1,6 +1,7 @@
 using CoreSyncServer.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -78,6 +79,12 @@ public class UsersController(UserManager<ApplicationUser> userManager) : Control
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(string id)
     {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (id == currentUserId)
+        {
+            return BadRequest(new[] { "You cannot delete your own account." });
+        }
+
         var user = await userManager.FindByIdAsync(id);
         if (user is null) return NotFound();
 

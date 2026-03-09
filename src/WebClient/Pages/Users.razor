@@ -1,6 +1,7 @@
 @page "/users"
 @layout DashboardLayout
 @using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
 @attribute [Authorize]
 @rendermode InteractiveWebAssembly
 @inject HttpClient Http
@@ -66,11 +67,14 @@
                                                 title="Edit user">
                                             <span class="i-lucide-pencil size-4"></span>
                                         </button>
-                                        <button @onclick="() => OpenDeleteDialog(user)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-burnt-peach-500 hover:bg-gray-100 transition-colors"
-                                                title="Delete user">
-                                            <span class="i-lucide-trash-2 size-4"></span>
-                                        </button>
+                                        @if (user.Id != currentUserId)
+                                        {
+                                            <button @onclick="() => OpenDeleteDialog(user)"
+                                                    class="p-2 rounded-lg text-gray-400 hover:text-burnt-peach-500 hover:bg-gray-100 transition-colors"
+                                                    title="Delete user">
+                                                <span class="i-lucide-trash-2 size-4"></span>
+                                            </button>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -190,6 +194,10 @@
 }
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? currentUserId;
     private List<UserDto>? users;
     private bool showDialog;
     private DialogMode dialogMode;
@@ -211,6 +219,11 @@
     {
         if (firstRender)
         {
+            if (AuthState is not null)
+            {
+                var state = await AuthState;
+                currentUserId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            }
             await LoadUsers();
             _loaded = true;
             StateHasChanged();
