@@ -8,7 +8,7 @@
 
 <PageTitle>Users</PageTitle>
 
-<div class="space-y-6">
+<div class="space-y-4">
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">Users</h1>
@@ -21,7 +21,7 @@
         </button>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="bg-white rounded border border-gray-100 overflow-hidden">
         @if (users is null)
         {
             <div class="p-12 text-center text-gray-400">
@@ -91,7 +91,7 @@
 {
     <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseDialog"></div>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
             @if (dialogMode == DialogMode.Delete)
             {
                 <div class="p-6">
@@ -213,8 +213,6 @@
     private record UserDto(string Id, string? UserName, string? Email, bool EmailConfirmed, bool LockoutEnabled, DateTimeOffset? LockoutEnd);
     private enum DialogMode { Create, Edit, Delete }
 
-    private bool _loaded;
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -222,10 +220,9 @@
             if (AuthState is not null)
             {
                 var state = await AuthState;
-                currentUserId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                currentUserId = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             }
             await LoadUsers();
-            _loaded = true;
             StateHasChanged();
         }
     }

@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @plugin "@egoist/tailwindcss-icons";
@@ -7,8 +6,16 @@
 @source "../Components/**/*.razor.css";
 @source "../../WebClient/**/*.razor";
 
+@font-face {
+    font-family: 'Hubot Sans';
+    src: url('/fonts/Hubot-Sans.woff2') format('woff2');
+    font-weight: 200 900;
+    font-style: normal;
+    font-display: swap;
+}
+
 @theme {
-    --font-sans: 'Inter', sans-serif;
+    --font-sans: 'Hubot Sans', sans-serif;
 
     --color-charcoal-blue-50: #e8edef;
     --color-charcoal-blue-100: #080e11;

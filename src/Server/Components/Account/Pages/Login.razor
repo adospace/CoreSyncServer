@@ -16,14 +16,14 @@
 <div class="min-h-screen flex items-center justify-center px-4">
     <div class="w-full max-w-md">
         <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-verdigris-500 mb-4">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-verdigris-500 mb-4">
                 <span class="text-white font-bold text-xl">CS</span>
             </div>
             <h1 class="text-2xl font-bold text-white">Welcome back</h1>
             <p class="text-charcoal-blue-800 mt-1">Sign in to your account</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-2xl p-8">
+        <div class="bg-white rounded p-8">
             <StatusMessage Message="@errorMessage" />
             <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
                 <DataAnnotationsValidator />
