@@ -1,13 +1,23 @@
-﻿@page "/counter"
-@rendermode InteractiveAuto
+@page "/counter"
+@layout DashboardLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveWebAssembly
 
 <PageTitle>Counter</PageTitle>
 
-<h1>Counter</h1>
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Counter</h1>
 
-<p role="status">Current count: @currentCount</p>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <p class="text-gray-600 mb-4" role="status">Current count: <span class="text-2xl font-bold text-verdigris-500">@currentCount</span></p>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+        <button class="bg-verdigris-500 hover:bg-verdigris-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                @onclick="IncrementCount">
+            Click me
+        </button>
+    </div>
+</div>
 
 @code {
     private int currentCount = 0;

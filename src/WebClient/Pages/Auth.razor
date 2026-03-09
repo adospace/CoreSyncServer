@@ -1,14 +1,25 @@
-﻿@page "/auth"
-
+@page "/auth"
+@layout DashboardLayout
 @using Microsoft.AspNetCore.Authorization
-
 @attribute [Authorize]
-@rendermode InteractiveAuto
+@rendermode InteractiveWebAssembly
 
 <PageTitle>Auth</PageTitle>
 
-<h1>You are authenticated</h1>
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Authentication Status</h1>
 
-<AuthorizeView>
-    Hello @context.User.Identity?.Name!
-</AuthorizeView>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <AuthorizeView>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-verdigris-500 flex items-center justify-center">
+                    <IconUser Size="20" CssClass="text-white" />
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-900">You are authenticated</p>
+                    <p class="text-sm text-gray-500">Hello, @context.User.Identity?.Name!</p>
+                </div>
+            </div>
+        </AuthorizeView>
+    </div>
+</div>

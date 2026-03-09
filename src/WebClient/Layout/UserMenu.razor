@@ -1,0 +1,65 @@
+@using Microsoft.AspNetCore.Components.Authorization
+
+@inject NavigationManager NavigationManager
+
+<div class="relative">
+    <button @onclick="ToggleMenu" @onclick:stopPropagation="true"
+            class="flex items-center gap-2 rounded-full hover:bg-gray-100 p-1.5 transition-colors">
+        <div class="w-8 h-8 rounded-full bg-verdigris-500 flex items-center justify-center text-white text-sm font-semibold">
+            @initials
+        </div>
+        <IconChevronDown Size="16" CssClass="text-gray-500" />
+    </button>
+
+    @if (isOpen)
+    {
+        <div class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+            <div class="px-4 py-3 border-b border-gray-100">
+                <p class="text-sm font-medium text-gray-900">@userName</p>
+                <p class="text-xs text-gray-500 truncate">@userEmail</p>
+            </div>
+            <button @onclick="Logout"
+                    class="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                <IconLogOut Size="16" />
+                <span>Sign out</span>
+            </button>
+        </div>
+    }
+</div>
+
+@if (isOpen)
+{
+    <div class="fixed inset-0 z-40" @onclick="CloseMenu"></div>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private bool isOpen;
+    private string userName = "";
+    private string userEmail = "";
+    private string initials = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            var user = authState.User;
+            userEmail = user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value
+                       ?? user.FindFirst("email")?.Value
+                       ?? user.Identity?.Name ?? "";
+            userName = user.Identity?.Name ?? userEmail;
+            initials = string.IsNullOrEmpty(userName) ? "U" : userName[..1].ToUpper();
+        }
+    }
+
+    private void ToggleMenu() => isOpen = !isOpen;
+    private void CloseMenu() => isOpen = false;
+
+    private void Logout()
+    {
+        NavigationManager.NavigateTo("Account/PerformLogout", forceLoad: true);
+    }
+}

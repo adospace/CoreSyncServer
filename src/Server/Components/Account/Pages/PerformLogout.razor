@@ -1,0 +1,18 @@
+@page "/Account/PerformLogout"
+
+@using Microsoft.AspNetCore.Identity
+@using CoreSyncServer.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SignInManager.SignOutAsync();
+        NavigationManager.NavigateTo("Account/Login", forceLoad: true);
+    }
+}
