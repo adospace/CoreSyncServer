@@ -52,7 +52,10 @@ namespace CoreSyncServer.Data
                 ConcurrencyStamp = AdminRoleId
             };
 
-            var hasher = new PasswordHasher<ApplicationUser>();
+            // Pre-computed hash for "admin" password - do not use PasswordHasher dynamically in HasData
+            // To regenerate: new PasswordHasher<ApplicationUser>().HashPassword(adminUser, "admin")
+            const string adminPasswordHash = "AQAAAAIAAYagAAAAEG1yor+ewRplvj33lrT+XzGAg5S0+b8567EtIg7WbPLQwBO1E4xGeSXFO7AwLnylXg==";
+
             var adminUser = new ApplicationUser
             {
                 Id = AdminUserId,
@@ -62,9 +65,9 @@ namespace CoreSyncServer.Data
                 NormalizedEmail = "ADMIN@LOCALHOST",
                 EmailConfirmed = true,
                 SecurityStamp = AdminUserId,
-                ConcurrencyStamp = AdminUserId
+                ConcurrencyStamp = AdminUserId,
+                PasswordHash = adminPasswordHash
             };
-            adminUser.PasswordHash = hasher.HashPassword(adminUser, "admin");
 
             builder.Entity<IdentityRole>().HasData(adminRole);
             builder.Entity<ApplicationUser>().HasData(adminUser);
