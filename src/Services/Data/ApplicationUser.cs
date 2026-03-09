@@ -6,5 +6,4 @@ namespace CoreSyncServer.Data
     public class ApplicationUser : IdentityUser
     {
     }
-
 }
