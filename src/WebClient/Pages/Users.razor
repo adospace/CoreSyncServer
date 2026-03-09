@@ -1,0 +1,328 @@
+@page "/users"
+@layout DashboardLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveWebAssembly
+@inject HttpClient Http
+
+<PageTitle>Users</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Users</h1>
+            <p class="text-gray-500 mt-1">Manage application users and their accounts.</p>
+        </div>
+        <button @onclick="OpenCreateDialog"
+                class="bg-verdigris-500 hover:bg-verdigris-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <span class="i-lucide-plus size-4"></span>
+            Add User
+        </button>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        @if (users is null)
+        {
+            <div class="p-12 text-center text-gray-400">
+                <span class="i-lucide-loader-2 size-6 animate-spin inline-block"></span>
+                <p class="mt-2 text-sm">Loading users...</p>
+            </div>
+        }
+        else if (users.Count == 0)
+        {
+            <div class="p-12 text-center text-gray-400">
+                <span class="i-lucide-users size-8 inline-block mb-2"></span>
+                <p class="text-sm">No users found.</p>
+            </div>
+        }
+        else
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-100 bg-gray-50/50">
+                            <th class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Username</th>
+                            <th class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Email</th>
+                            <th class="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        @foreach (var user in users)
+                        {
+                            <tr class="hover:bg-gray-50/50 transition-colors">
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-charcoal-blue-500 flex items-center justify-center text-white text-xs font-medium">
+                                            @(user.UserName?.Length > 0 ? user.UserName[..1].ToUpper() : "?")
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-900">@user.UserName</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-600">@user.Email</td>
+                                <td class="px-6 py-4 text-right">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <button @onclick="() => OpenEditDialog(user)"
+                                                class="p-2 rounded-lg text-gray-400 hover:text-verdigris-500 hover:bg-gray-100 transition-colors"
+                                                title="Edit user">
+                                            <span class="i-lucide-pencil size-4"></span>
+                                        </button>
+                                        <button @onclick="() => OpenDeleteDialog(user)"
+                                                class="p-2 rounded-lg text-gray-400 hover:text-burnt-peach-500 hover:bg-gray-100 transition-colors"
+                                                title="Delete user">
+                                            <span class="i-lucide-trash-2 size-4"></span>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@* Dialog backdrop *@
+@if (showDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            @if (dialogMode == DialogMode.Delete)
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-burnt-peach-900 flex items-center justify-center">
+                            <span class="i-lucide-alert-triangle size-5 text-burnt-peach-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">Delete User</h2>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-6">
+                        Are you sure you want to delete <strong>@selectedUser?.UserName</strong>? This action cannot be undone.
+                    </p>
+
+                    @if (errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-burnt-peach-900 border border-burnt-peach-700 rounded-lg">
+                            @foreach (var error in errorMessages)
+                            {
+                                <p class="text-sm text-burnt-peach-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="flex justify-end gap-3">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="DeleteUser" disabled="@isSaving"
+                                class="px-4 py-2 text-sm font-medium text-white bg-burnt-peach-500 hover:bg-burnt-peach-400 rounded-lg transition-colors disabled:opacity-50">
+                            @(isSaving ? "Deleting..." : "Delete")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-10 h-10 rounded-lg bg-verdigris-900 flex items-center justify-center">
+                            <span class="i-lucide-user-plus size-5 text-verdigris-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            @(dialogMode == DialogMode.Create ? "Add User" : "Edit User")
+                        </h2>
+                    </div>
+
+                    @if (errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-burnt-peach-900 border border-burnt-peach-700 rounded-lg">
+                            @foreach (var error in errorMessages)
+                            {
+                                <p class="text-sm text-burnt-peach-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                            <input type="text" @bind="formUserName" placeholder="Enter username"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" @bind="formEmail" placeholder="user@example.com"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                        </div>
+                        @if (dialogMode == DialogMode.Create)
+                        {
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input type="password" @bind="formPassword" placeholder="Enter password"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verdigris-500 focus:border-verdigris-500 outline-none transition-colors" />
+                            </div>
+                        }
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="SaveUser" disabled="@isSaving"
+                                class="px-4 py-2 text-sm font-medium text-white bg-verdigris-500 hover:bg-verdigris-600 rounded-lg transition-colors disabled:opacity-50">
+                            @if (isSaving)
+                            {
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>@(dialogMode == DialogMode.Create ? "Create" : "Save Changes")</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserDto>? users;
+    private bool showDialog;
+    private DialogMode dialogMode;
+    private UserDto? selectedUser;
+    private bool isSaving;
+    private List<string> errorMessages = [];
+
+    // Form fields
+    private string formUserName = "";
+    private string formEmail = "";
+    private string formPassword = "";
+
+    private record UserDto(string Id, string? UserName, string? Email, bool EmailConfirmed, bool LockoutEnabled, DateTimeOffset? LockoutEnd);
+    private enum DialogMode { Create, Edit, Delete }
+
+    private bool _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUsers();
+            _loaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadUsers()
+    {
+        users = await Http.GetFromJsonAsync<List<UserDto>>("api/users");
+    }
+
+    private void OpenCreateDialog()
+    {
+        dialogMode = DialogMode.Create;
+        formUserName = "";
+        formEmail = "";
+        formPassword = "";
+        errorMessages = [];
+        showDialog = true;
+    }
+
+    private void OpenEditDialog(UserDto user)
+    {
+        dialogMode = DialogMode.Edit;
+        selectedUser = user;
+        formUserName = user.UserName ?? "";
+        formEmail = user.Email ?? "";
+        errorMessages = [];
+        showDialog = true;
+    }
+
+    private void OpenDeleteDialog(UserDto user)
+    {
+        dialogMode = DialogMode.Delete;
+        selectedUser = user;
+        errorMessages = [];
+        showDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        showDialog = false;
+        selectedUser = null;
+        errorMessages = [];
+    }
+
+    private async Task SaveUser()
+    {
+        isSaving = true;
+        errorMessages = [];
+
+        try
+        {
+            HttpResponseMessage response;
+
+            if (dialogMode == DialogMode.Create)
+            {
+                response = await Http.PostAsJsonAsync("api/users", new { UserName = formUserName, Email = formEmail, Password = formPassword });
+            }
+            else
+            {
+                response = await Http.PutAsJsonAsync($"api/users/{selectedUser!.Id}", new { UserName = formUserName, Email = formEmail });
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDialog();
+                await LoadUsers();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessages = [ex.Message];
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteUser()
+    {
+        isSaving = true;
+        errorMessages = [];
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/users/{selectedUser!.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDialog();
+                await LoadUsers();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessages = [ex.Message];
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
