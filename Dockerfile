@@ -4,7 +4,10 @@ EXPOSE 8080
 EXPOSE 8081
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+ENV NODE_VERSION=22
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
 # Copy solution and project files
@@ -21,6 +24,11 @@ COPY CoreSync/src/CoreSync.Sqlite/CoreSync.Sqlite.csproj CoreSync/src/CoreSync.S
 COPY CoreSync/src/CoreSync.SqlServer/CoreSync.SqlServer.csproj CoreSync/src/CoreSync.SqlServer/
 COPY CoreSync/src/CoreSync.SqlServerCT/CoreSync.SqlServerCT.csproj CoreSync/src/CoreSync.SqlServerCT/
 
+# Install npm dependencies for Linux (ignore any Windows lock file)
+WORKDIR /src/src/Server
+RUN rm -f package-lock.json && npm install
+WORKDIR /src
+
 # Restore
 RUN dotnet restore src/Server/CoreSyncServer.csproj
 
@@ -29,7 +37,6 @@ COPY CoreSync/ CoreSync/
 COPY src/ src/
 
 WORKDIR /src/src/Server
-RUN npm install
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 FROM base AS final
