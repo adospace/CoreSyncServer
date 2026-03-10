@@ -1,0 +1,3 @@
+[submodule "CoreSync"]
+	path = CoreSync
+	url = https://github.com/adospace/CoreSync.git

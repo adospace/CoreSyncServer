@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="Services/CoreSyncServer.Services.csproj" />
+  <Folder Name="/Server/" />
+  <Project Path="../tests/CoreSyncServer.Tests/CoreSyncServer.Tests.csproj" />
   <Project Path="Server/CoreSyncServer.csproj" />
   <Project Path="WebClient/CoreSyncServer.Client.csproj" />
 </Solution>
