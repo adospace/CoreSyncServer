@@ -1,0 +1,407 @@
+@page "/data-stores"
+@page "/project/datastores/{ProjectId:int}"
+@attribute [Authorize]
+@inherits InteractivePage
+@inject NavigationManager NavigationManager
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Data Stores</PageTitle>
+
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                @if (ProjectId.HasValue && _projectName is not null)
+                {
+                    <span>Data Stores — @_projectName</span>
+                }
+                else
+                {
+                    <span>Data Stores</span>
+                }
+            </h1>
+            <p class="text-gray-500 mt-1">Manage data store connections and configurations.</p>
+        </div>
+        <button @onclick="OpenCreateDialog"
+                class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <span class="i-lucide-plus size-4"></span>
+            New Data Store
+        </button>
+    </div>
+
+    <DataGrid Loading="@(_dataStores is null)"
+              LoadingMessage="Loading data stores..."
+              EmptyIcon="i-lucide-database"
+              EmptyMessage="No data stores found."
+              ItemCount="@(_filteredDataStores?.Count() ?? 0)"
+              Pagination="@_pagination"
+              FilterPlaceholder="Search data stores..."
+              FilterText="@_searchText"
+              FilterTextChanged="@HandleFilter">
+        <QuickGrid Items="@_filteredDataStores" Pagination="@_pagination" Theme="custom">
+            <TemplateColumn Title="Name" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Name))">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-prussian-blue-500 flex items-center justify-center text-white text-xs font-medium">
+                        @(context.Name.Length > 0 ? context.Name[..1].ToUpper() : "?")
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">@context.Name</span>
+                </div>
+            </TemplateColumn>
+            <TemplateColumn Title="Type" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Type))">
+                <div class="flex items-center gap-2">
+                    <span class="@GetTypeIconClass(context.Type) size-4 shrink-0"></span>
+                    <span class="text-sm text-gray-700">@GetTypeLabel(context.Type)</span>
+                </div>
+            </TemplateColumn>
+            @if (!ProjectId.HasValue)
+            {
+                <TemplateColumn Title="Project" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.ProjectName))">
+                    <a href="/project/datastores/@context.ProjectId" class="text-sm text-dusk-blue-500 hover:text-dusk-blue-600 hover:underline">
+                        @context.ProjectName
+                    </a>
+                </TemplateColumn>
+            }
+            <TemplateColumn Title="Configurations" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.ConfigurationsCount))">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    @context.ConfigurationsCount
+                </span>
+            </TemplateColumn>
+            <TemplateColumn Title="Sync Sessions" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.SyncSessionsCount))">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    @context.SyncSessionsCount
+                </span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions" Align="Align.End">
+                <div class="flex items-center justify-end gap-1">
+                    <button @onclick="() => NavigateToEdit(context)"
+                            class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                            title="Edit data store">
+                        <span class="i-lucide-pencil size-4"></span>
+                    </button>
+                    <button @onclick="() => OpenDeleteDialog(context)"
+                            class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
+                            title="Delete data store">
+                        <span class="i-lucide-trash-2 size-4"></span>
+                    </button>
+                </div>
+            </TemplateColumn>
+        </QuickGrid>
+    </DataGrid>
+</div>
+
+@* No projects dialog *@
+@if (_showNoProjectsDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseNoProjectsDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                        <span class="i-lucide-info size-5 text-dusk-blue-500"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">No Projects Available</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-6">
+                    You need to create a project before adding a data store. Data stores must belong to a project.
+                </p>
+                <div class="flex justify-end gap-3">
+                    <button @onclick="CloseNoProjectsDialog"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick='() => NavigationManager.NavigateTo("/projects")'
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors">
+                        Go to Projects
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Create dialog *@
+@if (_showCreateDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseCreateDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                        <span class="i-lucide-database size-5 text-dusk-blue-500"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">New Data Store</h2>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input type="text" @bind="_formName" placeholder="Enter data store name"
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                        <select @bind="_formType"
+                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
+                            <option value="@DataStoreType.SQLite">SQLite</option>
+                            <option value="@DataStoreType.SqlServer">SQL Server</option>
+                            <option value="@DataStoreType.PostgreSQL">PostgreSQL</option>
+                        </select>
+                    </div>
+                    @if (!ProjectId.HasValue)
+                    {
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                            <select @bind="_formProjectId"
+                                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
+                                <option value="0">Select a project...</option>
+                                @if (_projects is not null)
+                                {
+                                    @foreach (var project in _projects)
+                                    {
+                                        <option value="@project.Id">@project.Name</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button @onclick="CloseCreateDialog"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick="NavigateToCreate" disabled="@(!IsCreateFormValid())"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                        Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Delete dialog *@
+@if (_showDeleteDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseDeleteDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
+                        <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Delete Data Store</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-2">
+                    This will permanently delete <strong>@_selectedDataStore?.Name</strong> and all associated configurations and sync sessions. This action cannot be undone.
+                </p>
+                <p class="text-sm text-gray-600 mb-4">
+                    Type <strong>@_selectedDataStore?.Name</strong> to confirm:
+                </p>
+                <input type="text" @bind="_deleteConfirmText" placeholder="Enter data store name"
+                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ink-black-500 focus:border-ink-black-500 outline-none transition-colors mb-4" />
+
+                @if (_errorMessages.Count > 0)
+                {
+                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                        @foreach (var error in _errorMessages)
+                        {
+                            <p class="text-sm text-ink-black-500">@error</p>
+                        }
+                    </div>
+                }
+
+                <div class="flex justify-end gap-3">
+                    <button @onclick="CloseDeleteDialog"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick="DeleteDataStore" disabled="@(_isSaving || _deleteConfirmText != _selectedDataStore?.Name)"
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
+                        @(_isSaving ? "Deleting..." : "Delete Data Store")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int? ProjectId { get; set; }
+
+    private PaginationState _pagination = new() { ItemsPerPage = 10 };
+    private List<DataStoreDto>? _dataStores;
+    private List<ProjectOption>? _projects;
+    private string? _projectName;
+    private string _searchText = "";
+    private bool _isSaving;
+    private List<string> _errorMessages = [];
+
+    // Create dialog
+    private bool _showCreateDialog;
+    private bool _showNoProjectsDialog;
+    private string _formName = "";
+    private DataStoreType _formType = DataStoreType.SQLite;
+    private int _formProjectId;
+
+    // Delete dialog
+    private bool _showDeleteDialog;
+    private DataStoreDto? _selectedDataStore;
+    private string _deleteConfirmText = "";
+
+    private IQueryable<DataStoreDto>? _filteredDataStores =>
+        _dataStores?.Where(d =>
+            string.IsNullOrEmpty(_searchText)
+            || d.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || d.ProjectName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || GetTypeLabel(d.Type).Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+        ).AsQueryable();
+
+    private enum DataStoreType { SQLite, SqlServer, PostgreSQL }
+    private record DataStoreDto(int Id, string Name, DataStoreType Type, string ProjectName, int ProjectId, int ConfigurationsCount, int SyncSessionsCount);
+    private record ProjectOption(int Id, string Name);
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        if (!ProjectId.HasValue)
+        {
+            _projects = await Http.GetFromJsonAsync<List<ProjectOption>>("api/projects");
+        }
+
+        await LoadDataStores();
+    }
+
+    private async Task LoadDataStores()
+    {
+        var url = ProjectId.HasValue
+            ? $"api/datastores?projectId={ProjectId.Value}"
+            : "api/datastores";
+
+        _dataStores = await Http.GetFromJsonAsync<List<DataStoreDto>>(url);
+
+        if (ProjectId.HasValue && _dataStores?.Count > 0)
+        {
+            _projectName = _dataStores[0].ProjectName;
+        }
+        else if (ProjectId.HasValue)
+        {
+            _projectName = "Project";
+        }
+    }
+
+    private void HandleFilter(string value)
+    {
+        _searchText = value;
+    }
+
+    private static string GetTypeIconClass(DataStoreType type) => type switch
+    {
+        DataStoreType.SQLite => "i-simple-icons-sqlite",
+        DataStoreType.SqlServer => "i-simple-icons-microsoftsqlserver",
+        DataStoreType.PostgreSQL => "i-simple-icons-postgresql",
+        _ => "i-lucide-database"
+    };
+
+    private static string GetTypeLabel(DataStoreType type) => type switch
+    {
+        DataStoreType.SQLite => "SQLite",
+        DataStoreType.SqlServer => "SQL Server",
+        DataStoreType.PostgreSQL => "PostgreSQL",
+        _ => "Unknown"
+    };
+
+    private void NavigateToEdit(DataStoreDto dataStore)
+    {
+        NavigationManager.NavigateTo($"/data-store/{dataStore.Id}");
+    }
+
+    // Create dialog
+    private void OpenCreateDialog()
+    {
+        if (!ProjectId.HasValue && (_projects is null || _projects.Count == 0))
+        {
+            _showNoProjectsDialog = true;
+            return;
+        }
+
+        _formName = "";
+        _formType = DataStoreType.SQLite;
+        _formProjectId = ProjectId ?? 0;
+        _showCreateDialog = true;
+    }
+
+    private void CloseCreateDialog()
+    {
+        _showCreateDialog = false;
+    }
+
+    private void CloseNoProjectsDialog()
+    {
+        _showNoProjectsDialog = false;
+    }
+
+    private bool IsCreateFormValid()
+    {
+        var projectId = ProjectId ?? _formProjectId;
+        return !string.IsNullOrWhiteSpace(_formName) && projectId > 0;
+    }
+
+    private void NavigateToCreate()
+    {
+        var projectId = ProjectId ?? _formProjectId;
+        var encodedName = Uri.EscapeDataString(_formName.Trim());
+        NavigationManager.NavigateTo($"/data-store/{_formType}/new/{projectId}/{encodedName}");
+    }
+
+    // Delete dialog
+    private void OpenDeleteDialog(DataStoreDto dataStore)
+    {
+        _selectedDataStore = dataStore;
+        _deleteConfirmText = "";
+        _errorMessages = [];
+        _showDeleteDialog = true;
+    }
+
+    private void CloseDeleteDialog()
+    {
+        _showDeleteDialog = false;
+        _selectedDataStore = null;
+        _errorMessages = [];
+    }
+
+    private async Task DeleteDataStore()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/datastores/{_selectedDataStore!.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDeleteDialog();
+                await LoadDataStores();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}
