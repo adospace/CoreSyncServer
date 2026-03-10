@@ -129,9 +129,29 @@ else
                                 <span class="i-lucide-arrow-up-down size-3.5"></span>
                                 @(_isSorting ? "Sorting..." : "Sort")
                             </button>
+                            @if (_selectedTableIds.Count > 0)
+                            {
+                                <div class="h-6 w-px bg-gray-300"></div>
+                                <button @onclick="ToggleSelectAllTables"
+                                        class="text-gray-600 hover:text-gray-800 font-medium py-1.5 px-3 rounded-lg hover:bg-gray-100 transition-colors text-sm flex items-center gap-1.5">
+                                    <span class="i-lucide-check-square size-3.5"></span>
+                                    @(AllVisibleTablesSelected ? "Deselect All" : "Select All")
+                                </button>
+                                <button @onclick="MarkSelectedTablesForDeletion"
+                                        class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
+                                    <span class="i-lucide-trash-2 size-3.5"></span>
+                                    Delete Selected (@_selectedTableIds.Count)
+                                </button>
+                            }
                         </ToolbarContent>
                         <ChildContent>
                             <QuickGrid Items="@_filteredTableConfigs" Pagination="@_tablePagination" Theme="custom">
+                                <TemplateColumn Title="" Align="Align.Center">
+                                    <input type="checkbox"
+                                           checked="@_selectedTableIds.Contains(context.Id)"
+                                           @onchange="() => ToggleTableSelection(context.Id)"
+                                           class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                </TemplateColumn>
                                 <TemplateColumn Title="Sort" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Sort))" IsDefaultSortColumn="true">
                                     <span class="text-sm text-gray-500">@context.Sort</span>
                                 </TemplateColumn>
@@ -552,6 +572,10 @@ else
     private bool _isDialogSaving;
     private List<string> _dialogErrorMessages = [];
 
+    // Selection & pending deletions
+    private HashSet<int> _selectedTableIds = [];
+    private HashSet<int> _pendingTableDeletions = [];
+
     // Scaffold & Sort
     private bool _isScaffolding;
     private bool _isSorting;
@@ -580,13 +604,15 @@ else
     private record EndpointDto(Guid Id, string Name, string? Tags);
 
     private bool HasUnsavedChanges =>
-        _name != _savedName || _description != _savedDescription || _version != _savedVersion;
+        _name != _savedName || _description != _savedDescription || _version != _savedVersion
+        || _pendingTableDeletions.Count > 0;
 
     private IQueryable<TableConfigDto>? _filteredTableConfigs =>
         _tableConfigs?.Where(t =>
-            string.IsNullOrEmpty(_tableSearchText)
-            || t.Name.Contains(_tableSearchText, StringComparison.OrdinalIgnoreCase)
-            || (t.Schema?.Contains(_tableSearchText, StringComparison.OrdinalIgnoreCase) ?? false)
+            !_pendingTableDeletions.Contains(t.Id)
+            && (string.IsNullOrEmpty(_tableSearchText)
+                || t.Name.Contains(_tableSearchText, StringComparison.OrdinalIgnoreCase)
+                || (t.Schema?.Contains(_tableSearchText, StringComparison.OrdinalIgnoreCase) ?? false))
         ).AsQueryable();
 
     private IQueryable<EndpointDto>? _filteredEndpoints =>
@@ -678,6 +704,32 @@ else
             {
                 var errors = await response.Content.ReadFromJsonAsync<List<string>>();
                 _errorMessages = errors ?? ["An unexpected error occurred."];
+                return;
+            }
+
+            // Process pending table deletions
+            if (_pendingTableDeletions.Count > 0)
+            {
+                var deleteErrors = new List<string>();
+
+                foreach (var tableId in _pendingTableDeletions)
+                {
+                    var deleteResponse = await Http.DeleteAsync($"api/datastoreconfiguration/{ConfigId}/tables/{tableId}");
+                    if (!deleteResponse.IsSuccessStatusCode)
+                    {
+                        var errors = await deleteResponse.Content.ReadFromJsonAsync<List<string>>();
+                        deleteErrors.AddRange(errors ?? [$"Failed to delete table {tableId}."]);
+                    }
+                }
+
+                _pendingTableDeletions.Clear();
+                _selectedTableIds.Clear();
+                await LoadTableConfigs();
+
+                if (deleteErrors.Count > 0)
+                {
+                    _errorMessages = deleteErrors;
+                }
             }
         }
         catch (Exception ex)
@@ -733,6 +785,40 @@ else
     private void SwitchTab(Tab tab)
     {
         _activeTab = tab;
+    }
+
+    // Table selection
+    private bool AllVisibleTablesSelected =>
+        _filteredTableConfigs is not null
+        && _filteredTableConfigs.Any()
+        && _filteredTableConfigs.All(t => _selectedTableIds.Contains(t.Id));
+
+    private void ToggleTableSelection(int tableId)
+    {
+        if (!_selectedTableIds.Remove(tableId))
+            _selectedTableIds.Add(tableId);
+    }
+
+    private void ToggleSelectAllTables()
+    {
+        if (_filteredTableConfigs is null) return;
+
+        if (AllVisibleTablesSelected)
+        {
+            foreach (var t in _filteredTableConfigs)
+                _selectedTableIds.Remove(t.Id);
+        }
+        else
+        {
+            foreach (var t in _filteredTableConfigs)
+                _selectedTableIds.Add(t.Id);
+        }
+    }
+
+    private void MarkSelectedTablesForDeletion()
+    {
+        _pendingTableDeletions.UnionWith(_selectedTableIds);
+        _selectedTableIds.Clear();
     }
 
     // Sync direction helpers
@@ -846,6 +932,8 @@ else
             if (response.IsSuccessStatusCode)
             {
                 _showDeleteTableDialog = false;
+                _selectedTableIds.Remove(_deletingTable!.Id);
+                _pendingTableDeletions.Remove(_deletingTable.Id);
                 _deletingTable = null;
                 await LoadTableConfigs();
             }
@@ -878,6 +966,8 @@ else
             if (response.IsSuccessStatusCode)
             {
                 _tableConfigs = await response.Content.ReadFromJsonAsync<List<TableConfigDto>>();
+                _selectedTableIds.Clear();
+                _pendingTableDeletions.Clear();
             }
             else
             {
@@ -907,6 +997,8 @@ else
             if (response.IsSuccessStatusCode)
             {
                 _tableConfigs = await response.Content.ReadFromJsonAsync<List<TableConfigDto>>();
+                _selectedTableIds.Clear();
+                _pendingTableDeletions.Clear();
             }
             else
             {

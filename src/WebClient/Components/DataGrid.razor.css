@@ -185,6 +185,22 @@
     background-color: color-mix(in srgb, var(--color-dusk-blue-500) 3%, transparent);
 }
 
+/* Clickable rows — row-link fills its cell as a block-level anchor.
+   position:relative on <tr> is unreliable across browsers, so we avoid
+   the stretched ::after trick and instead make the link fill its <td>. */
+::deep .datagrid-clickable tbody tr {
+    cursor: pointer;
+}
+
+::deep .row-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    /* expand to cover the full cell area (match td padding) */
+    margin: -0.5rem -1.5rem;
+    padding: 0.5rem 1.5rem;
+}
+
 /* Empty placeholder rows from QuickGrid pagination — fully hidden */
 ::deep tbody tr:not(:has(> td:not(:empty))) {
     display: none;

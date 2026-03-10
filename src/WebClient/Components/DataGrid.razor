@@ -1,4 +1,4 @@
-<div class="datagrid-root bg-white rounded border border-gray-100 overflow-hidden">
+<div class="datagrid-root @(RowClickable ? "datagrid-clickable" : "") bg-white rounded border border-gray-100 overflow-hidden">
     @if (ShowFilter || ToolbarContent is not null)
     {
         <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -103,6 +103,9 @@
 
     [Parameter]
     public string EmptyMessage { get; set; } = "No data found.";
+
+    [Parameter]
+    public bool RowClickable { get; set; }
 
     /// <summary>
     /// Explicit item count for in-memory mode. When null (server-side mode),

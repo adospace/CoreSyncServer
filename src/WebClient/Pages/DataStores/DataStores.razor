@@ -39,10 +39,11 @@
               Pagination="@_pagination"
               FilterPlaceholder="Search data stores..."
               FilterText="@_searchText"
-              FilterTextChanged="@HandleFilter">
+              FilterTextChanged="@HandleFilter"
+              RowClickable="true">
         <QuickGrid Items="@_filteredDataStores" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Name))">
-                <span class="text-sm font-medium text-gray-900">@context.Name</span>
+                <a href="@($"/data-stores/{context.Id}/configurations")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>
             </TemplateColumn>
             <TemplateColumn Title="Type" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Type))">
                 <div class="flex items-center gap-2">

@@ -28,10 +28,11 @@
               Pagination="@_pagination"
               FilterPlaceholder="Search projects..."
               FilterText="@_searchText"
-              FilterTextChanged="@HandleFilter">
+              FilterTextChanged="@HandleFilter"
+              RowClickable="true">
         <QuickGrid Items="@_filteredProjects" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<ProjectDto>.ByAscending(p => p.Name))">
-                <span class="text-sm font-medium text-gray-900">@context.Name</span>
+                <a href="@($"/project/datastores/{context.Id}")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>
             </TemplateColumn>
             <PropertyColumn Property="@(p => p.Description)" Title="Description" />
             <TemplateColumn Title="Status" SortBy="@(GridSort<ProjectDto>.ByAscending(p => p.IsEnabled))">
