@@ -49,13 +49,13 @@ jobs:
         run: npm install
 
       - name: Restore
-        run: dotnet restore src/CoreSynServer.slnx
+        run: dotnet restore src/CoreSyncServer.slnx
 
       - name: Build
-        run: dotnet build src/CoreSynServer.slnx -c Release --no-restore
+        run: dotnet build src/CoreSyncServer.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test src/CoreSynServer.slnx -c Release --no-build --verbosity normal
+        run: dotnet test src/CoreSyncServer.slnx -c Release --no-build --verbosity normal
 
   publish-docker:
     needs: build-and-test

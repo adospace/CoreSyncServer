@@ -11,7 +11,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
 WORKDIR /src
 
 # Copy solution and project files
-COPY src/CoreSynServer.slnx src/
+COPY src/CoreSyncServer.slnx src/
 COPY src/Server/CoreSyncServer.csproj src/Server/
 COPY src/Server/package.json src/Server/
 COPY src/Services/CoreSyncServer.Services.csproj src/Services/
