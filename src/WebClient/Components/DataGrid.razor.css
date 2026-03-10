@@ -1,0 +1,191 @@
+/* DataGrid scoped styles — all colors reference Tailwind theme variables */
+
+::deep table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+::deep thead tr {
+    border-bottom: 1px solid var(--color-gray-100);
+    background-color: color-mix(in srgb, var(--color-gray-50) 50%, transparent);
+}
+
+::deep th {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0;
+    color: var(--color-gray-500);
+    white-space: nowrap;
+    user-select: none;
+}
+
+/* QuickGrid inner header layout */
+::deep .col-header-content {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+}
+
+/* Reset QuickGrid's col-title (rendered as <button> for sortable, <div> for non-sortable) */
+::deep .col-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex-grow: 1;
+    padding: 0;
+    gap: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+}
+
+/* Hide QuickGrid's native sort indicator */
+::deep .sort-indicator {
+    display: none;
+}
+
+/* Sortable headers — full cell hover & click */
+::deep th:has(button.col-title) {
+    position: relative;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+}
+
+/* Expand sort button click target to fill entire th cell */
+::deep button.col-title::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+}
+
+::deep th:has(button.col-title):hover {
+    color: var(--color-dusk-blue-600);
+    background-color: color-mix(in srgb, var(--color-gray-100) 60%, transparent);
+}
+
+::deep th[aria-sort="ascending"],
+::deep th[aria-sort="descending"] {
+    color: var(--color-dusk-blue-500);
+}
+
+/* Lucide sort icons via ::after on the flex container (inline with title) */
+::deep th:has(button.col-title) .col-header-content::after {
+    content: "";
+    display: block;
+    flex-shrink: 0;
+    width: 0.875rem;
+    height: 0.875rem;
+    margin-left: 0.375rem;
+    background-color: currentColor;
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+}
+
+/* Unsorted: show chevrons-up-down only on hover */
+::deep th[aria-sort="none"] .col-header-content::after {
+    opacity: 0;
+    transition: opacity 0.15s;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+}
+
+::deep th[aria-sort="none"]:hover .col-header-content::after {
+    opacity: 0.5;
+}
+
+/* Ascending: chevron-up */
+::deep th[aria-sort="ascending"] .col-header-content::after {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m18 15-6-6-6 6'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m18 15-6-6-6 6'/%3E%3C/svg%3E");
+}
+
+/* Descending: chevron-down */
+::deep th[aria-sort="descending"] .col-header-content::after {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Column options button */
+::deep .col-options-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.125rem;
+    margin-left: 0.25rem;
+    color: var(--color-gray-400);
+    border-radius: 0.25rem;
+    transition: color 0.15s, background-color 0.15s;
+    width: auto;
+}
+
+::deep .col-options-button:hover {
+    color: var(--color-dusk-blue-500);
+    background-color: var(--color-gray-100);
+}
+
+/* Table body */
+::deep tbody tr {
+    border-bottom: 1px solid var(--color-gray-100);
+    transition: background-color 0.15s;
+}
+
+::deep tbody tr:last-child {
+    border-bottom: none;
+}
+
+::deep tbody tr:hover {
+    background-color: color-mix(in srgb, var(--color-gray-50) 50%, transparent);
+}
+
+::deep td {
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    color: var(--color-gray-600);
+}
+
+/* Right-aligned columns (for actions) */
+::deep th[align="right"],
+::deep td[align="right"] {
+    text-align: right;
+}
+
+::deep th[align="center"],
+::deep td[align="center"] {
+    text-align: center;
+}
+
+/* QuickGrid justify classes */
+::deep td.col-justify-center {
+    text-align: center;
+}
+
+::deep td.col-justify-end {
+    text-align: right;
+}
+
+/* Subtle highlight on sorted column cells (covers up to 10 columns) */
+::deep table:has(th:nth-child(1):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(1),
+::deep table:has(th:nth-child(2):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(2),
+::deep table:has(th:nth-child(3):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(3),
+::deep table:has(th:nth-child(4):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(4),
+::deep table:has(th:nth-child(5):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(5),
+::deep table:has(th:nth-child(6):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(6),
+::deep table:has(th:nth-child(7):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(7),
+::deep table:has(th:nth-child(8):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(8),
+::deep table:has(th:nth-child(9):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(9),
+::deep table:has(th:nth-child(10):is([aria-sort="ascending"], [aria-sort="descending"])) :is(td, th):nth-child(10) {
+    background-color: color-mix(in srgb, var(--color-dusk-blue-500) 3%, transparent);
+}
+
+/* Empty placeholder rows from QuickGrid pagination — fully hidden */
+::deep tbody tr:not(:has(> td:not(:empty))) {
+    display: none;
+}

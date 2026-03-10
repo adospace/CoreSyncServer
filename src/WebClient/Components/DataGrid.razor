@@ -1,0 +1,146 @@
+<div class="datagrid-root bg-white rounded border border-gray-100 overflow-hidden">
+    @if (ShowFilter || ToolbarContent is not null)
+    {
+        <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            @if (ShowFilter)
+            {
+                <div class="relative flex-1 max-w-sm">
+                    <span class="i-lucide-search size-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></span>
+                    <input type="search"
+                           placeholder="@FilterPlaceholder"
+                           value="@FilterText"
+                           @oninput="OnFilterInput"
+                           class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm
+                                  focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500
+                                  outline-none transition-colors" />
+                </div>
+            }
+            @ToolbarContent
+        </div>
+    }
+
+    @if (Loading)
+    {
+        <div class="p-12 text-center text-gray-400">
+            <span class="i-lucide-loader-2 size-6 animate-spin inline-block"></span>
+            <p class="mt-2 text-sm">@LoadingMessage</p>
+        </div>
+    }
+    else if (ResolvedItemCount == 0)
+    {
+        <div class="p-12 text-center text-gray-400">
+            @if (!string.IsNullOrEmpty(EmptyIcon))
+            {
+                <span class="@EmptyIcon size-8 inline-block mb-2"></span>
+            }
+            <p class="text-sm">@EmptyMessage</p>
+        </div>
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            @ChildContent
+        </div>
+
+        @if (ShowPagination && Pagination is not null
+            && Pagination.TotalItemCount.HasValue
+            && Pagination.TotalItemCount.Value > Pagination.ItemsPerPage)
+        {
+            <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 text-sm text-gray-500">
+                <span>
+                    Showing @(Pagination.CurrentPageIndex * Pagination.ItemsPerPage + 1)–@(Math.Min((Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage, Pagination.TotalItemCount.Value))
+                    of @Pagination.TotalItemCount.Value
+                </span>
+                <div class="flex items-center gap-1">
+                    <button @onclick="GoToPreviousPage"
+                            disabled="@(Pagination.CurrentPageIndex == 0)"
+                            class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        <span class="i-lucide-chevron-left size-4"></span>
+                    </button>
+                    <button @onclick="GoToNextPage"
+                            disabled="@(Pagination.CurrentPageIndex >= Pagination.LastPageIndex)"
+                            class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        <span class="i-lucide-chevron-right size-4"></span>
+                    </button>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? ToolbarContent { get; set; }
+
+    [Parameter]
+    public PaginationState? Pagination { get; set; }
+
+    [Parameter]
+    public bool ShowPagination { get; set; } = true;
+
+    [Parameter]
+    public bool ShowFilter { get; set; } = true;
+
+    [Parameter]
+    public string FilterPlaceholder { get; set; } = "Search...";
+
+    [Parameter]
+    public string? FilterText { get; set; }
+
+    [Parameter]
+    public EventCallback<string> FilterTextChanged { get; set; }
+
+    [Parameter]
+    public bool Loading { get; set; }
+
+    [Parameter]
+    public string LoadingMessage { get; set; } = "Loading...";
+
+    [Parameter]
+    public string? EmptyIcon { get; set; }
+
+    [Parameter]
+    public string EmptyMessage { get; set; } = "No data found.";
+
+    /// <summary>
+    /// Explicit item count for in-memory mode. When null (server-side mode),
+    /// the count is derived from <see cref="PaginationState.TotalItemCount"/>
+    /// which QuickGrid populates automatically via ItemsProvider.
+    /// </summary>
+    [Parameter]
+    public int? ItemCount { get; set; }
+
+    /// <summary>
+    /// Resolves the effective item count:
+    /// - In-memory mode: uses the explicit <see cref="ItemCount"/> parameter.
+    /// - Server-side mode: uses <see cref="PaginationState.TotalItemCount"/> set by QuickGrid's ItemsProvider.
+    /// - Unknown (initial server-side render before first fetch): returns -1 to show content and let QuickGrid load.
+    /// </summary>
+    private int ResolvedItemCount =>
+        ItemCount ?? (int)(Pagination?.TotalItemCount ?? -1);
+
+    private async Task OnFilterInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        await FilterTextChanged.InvokeAsync(value);
+    }
+
+    private async Task GoToPreviousPage()
+    {
+        if (Pagination is not null && Pagination.CurrentPageIndex > 0)
+        {
+            await Pagination.SetCurrentPageIndexAsync(Pagination.CurrentPageIndex - 1);
+        }
+    }
+
+    private async Task GoToNextPage()
+    {
+        if (Pagination is not null && Pagination.CurrentPageIndex < Pagination.LastPageIndex)
+        {
+            await Pagination.SetCurrentPageIndexAsync(Pagination.CurrentPageIndex + 1);
+        }
+    }
+}

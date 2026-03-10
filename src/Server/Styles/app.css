@@ -5,6 +5,7 @@
 @source "../Components/**/*.razor";
 @source "../Components/**/*.razor.css";
 @source "../../WebClient/**/*.razor";
+@source "../../WebClient/**/*.razor.css";
 
 @font-face {
     font-family: 'Hubot Sans';
