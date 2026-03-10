@@ -1,0 +1,355 @@
+@page "/projects"
+@attribute [Authorize]
+@inherits InteractivePage
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Projects</PageTitle>
+
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Projects</h1>
+            <p class="text-gray-500 mt-1">Manage projects and their configurations.</p>
+        </div>
+        <button @onclick="OpenCreateDialog"
+                class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <span class="i-lucide-plus size-4"></span>
+            New Project
+        </button>
+    </div>
+
+    <DataGrid Loading="@(_projects is null)"
+              LoadingMessage="Loading projects..."
+              EmptyIcon="i-lucide-briefcase"
+              EmptyMessage="No projects found."
+              ItemCount="@(_filteredProjects?.Count() ?? 0)"
+              Pagination="@_pagination"
+              FilterPlaceholder="Search projects..."
+              FilterText="@_searchText"
+              FilterTextChanged="@HandleFilter">
+        <QuickGrid Items="@_filteredProjects" Pagination="@_pagination" Theme="custom">
+            <TemplateColumn Title="Name" SortBy="@(GridSort<ProjectDto>.ByAscending(p => p.Name))">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-prussian-blue-500 flex items-center justify-center text-white text-xs font-medium">
+                        @(context.Name.Length > 0 ? context.Name[..1].ToUpper() : "?")
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">@context.Name</span>
+                </div>
+            </TemplateColumn>
+            <PropertyColumn Property="@(p => p.Description)" Title="Description" />
+            <TemplateColumn Title="Status" SortBy="@(GridSort<ProjectDto>.ByAscending(p => p.IsEnabled))">
+                @if (context.IsEnabled)
+                {
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Enabled
+                    </span>
+                }
+                else
+                {
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        Disabled
+                    </span>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Tags">
+                @if (!string.IsNullOrWhiteSpace(context.Tags))
+                {
+                    <div class="flex flex-wrap gap-1">
+                        @foreach (var tag in context.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                @tag.ToUpper()
+                            </span>
+                        }
+                    </div>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Actions" Align="Align.End">
+                <div class="flex items-center justify-end gap-1">
+                    <button @onclick="() => OpenEditDialog(context)"
+                            class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                            title="Edit project">
+                        <span class="i-lucide-pencil size-4"></span>
+                    </button>
+                    <button @onclick="() => OpenDeleteDialog(context)"
+                            class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
+                            title="Delete project">
+                        <span class="i-lucide-trash-2 size-4"></span>
+                    </button>
+                </div>
+            </TemplateColumn>
+        </QuickGrid>
+    </DataGrid>
+</div>
+
+@* Dialog backdrop *@
+@if (_showDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            @if (_dialogMode == DialogMode.Delete)
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
+                            <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">Delete Project</h2>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">
+                        This will permanently delete <strong>@_selectedProject?.Name</strong> and all associated data. This action cannot be undone.
+                    </p>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Type <strong>@_selectedProject?.Name</strong> to confirm:
+                    </p>
+                    <input type="text" @bind="_deleteConfirmText" placeholder="Enter project name"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ink-black-500 focus:border-ink-black-500 outline-none transition-colors mb-4" />
+
+                    @if (_errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                            @foreach (var error in _errorMessages)
+                            {
+                                <p class="text-sm text-ink-black-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="flex justify-end gap-3">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="DeleteProject" disabled="@(_isSaving || _deleteConfirmText != _selectedProject?.Name)"
+                                class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
+                            @(_isSaving ? "Deleting..." : "Delete Project")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                            <span class="i-lucide-briefcase size-5 text-dusk-blue-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            @(_dialogMode == DialogMode.Create ? "New Project" : "Edit Project")
+                        </h2>
+                    </div>
+
+                    @if (_errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                            @foreach (var error in _errorMessages)
+                            {
+                                <p class="text-sm text-ink-black-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input type="text" @bind="_formName" placeholder="Enter project name"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <textarea @bind="_formDescription" placeholder="Enter project description" rows="3"
+                                      class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors resize-none"></textarea>
+                        </div>
+                        @if (_dialogMode == DialogMode.Create)
+                        {
+                            <div class="flex items-center gap-3">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" @bind="_formIsEnabled" class="sr-only peer" />
+                                    <div class="w-9 h-5 bg-gray-300 peer-focus:ring-2 peer-focus:ring-dusk-blue-500 rounded-full peer peer-checked:bg-dusk-blue-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                </label>
+                                <span class="text-sm font-medium text-gray-700">Enabled</span>
+                            </div>
+                        }
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                            <input type="text" @bind="_formTags" placeholder="e.g. production, backend, api"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                            <p class="text-xs text-gray-400 mt-1">Comma-separated list of tags.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="SaveProject" disabled="@_isSaving"
+                                class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                            @if (_isSaving)
+                            {
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>@(_dialogMode == DialogMode.Create ? "Create" : "Save Changes")</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private PaginationState _pagination = new() { ItemsPerPage = 10 };
+    private List<ProjectDto>? _projects;
+    private string _searchText = "";
+    private bool _showDialog;
+    private DialogMode _dialogMode;
+    private ProjectDto? _selectedProject;
+    private bool _isSaving;
+    private List<string> _errorMessages = [];
+
+    private IQueryable<ProjectDto>? _filteredProjects =>
+        _projects?.Where(p =>
+            string.IsNullOrEmpty(_searchText)
+            || p.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || (p.Description?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (p.Tags?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false)
+        ).AsQueryable();
+
+    // Form fields
+    private string _formName = "";
+    private string _formDescription = "";
+    private bool _formIsEnabled = true;
+    private string _formTags = "";
+    private string _deleteConfirmText = "";
+
+    private record ProjectDto(int Id, string Name, string? Description, bool IsEnabled, string? Tags, DateTime CreatedDate);
+    private enum DialogMode { Create, Edit, Delete }
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        await LoadProjects();
+    }
+
+    private void HandleFilter(string value)
+    {
+        _searchText = value;
+    }
+
+    private async Task LoadProjects()
+    {
+        _projects = await Http.GetFromJsonAsync<List<ProjectDto>>("api/projects");
+    }
+
+    private void OpenCreateDialog()
+    {
+        _dialogMode = DialogMode.Create;
+        _formName = "";
+        _formDescription = "";
+        _formIsEnabled = true;
+        _errorMessages = [];
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(ProjectDto project)
+    {
+        _dialogMode = DialogMode.Edit;
+        _selectedProject = project;
+        _formName = project.Name;
+        _formDescription = project.Description ?? "";
+        _formTags = project.Tags ?? "";
+        _errorMessages = [];
+        _showDialog = true;
+    }
+
+    private void OpenDeleteDialog(ProjectDto project)
+    {
+        _dialogMode = DialogMode.Delete;
+        _selectedProject = project;
+        _deleteConfirmText = "";
+        _errorMessages = [];
+        _showDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        _showDialog = false;
+        _selectedProject = null;
+        _errorMessages = [];
+    }
+
+    private async Task SaveProject()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            HttpResponseMessage response;
+
+            if (_dialogMode == DialogMode.Create)
+            {
+                response = await Http.PostAsJsonAsync("api/projects", new { Name = _formName, Description = _formDescription, IsEnabled = _formIsEnabled, Tags = _formTags });
+            }
+            else
+            {
+                response = await Http.PutAsJsonAsync($"api/projects/{_selectedProject!.Id}", new { Name = _formName, Description = _formDescription, Tags = _formTags });
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDialog();
+                await LoadProjects();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteProject()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/projects/{_selectedProject!.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDialog();
+                await LoadProjects();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}
