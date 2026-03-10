@@ -1,0 +1,332 @@
+@page "/data-store/{TypeName}/new/{ProjectId:int}/{EncodedName}"
+@attribute [Authorize]
+@inherits InteractivePage
+@inject NavigationManager NavigationManager
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>New Data Store</PageTitle>
+
+<div class="flex justify-center">
+    <div class="w-full max-w-2xl space-y-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">New Data Store</h1>
+            <p class="text-gray-500 mt-1">Configure your @GetTypeLabel() data store connection.</p>
+        </div>
+
+        @* Step indicator *@
+        <div class="flex items-center gap-2 text-sm">
+            @for (var i = 0; i < _steps.Length; i++)
+            {
+                var step = i;
+                <div class="flex items-center gap-2">
+                    @if (step < _currentStep)
+                    {
+                        <div class="w-7 h-7 rounded-full bg-dusk-blue-500 flex items-center justify-center">
+                            <span class="i-lucide-check size-4 text-white"></span>
+                        </div>
+                    }
+                    else if (step == _currentStep)
+                    {
+                        <div class="w-7 h-7 rounded-full bg-dusk-blue-500 flex items-center justify-center text-white text-xs font-semibold">
+                            @(step + 1)
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs font-semibold">
+                            @(step + 1)
+                        </div>
+                    }
+                    <span class="@(step == _currentStep ? "font-medium text-gray-900" : "text-gray-500")">@_steps[step]</span>
+                    @if (step < _steps.Length - 1)
+                    {
+                        <div class="w-8 h-px bg-gray-300"></div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Form card *@
+        <div class="bg-white rounded-lg border border-gray-200 p-6">
+
+            @* Step 1: General *@
+            @if (_currentStep == 0)
+            {
+                <div class="space-y-4">
+                    <h2 class="text-lg font-semibold text-gray-900">General Information</h2>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input type="text" @bind="_name"
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea @bind="_description" rows="3" placeholder="Optional description for this data store"
+                                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                        <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+                            <span class="@GetTypeIconClass() size-4 shrink-0"></span>
+                            <span class="text-sm text-gray-700">@GetTypeLabel()</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* Step 2: Connection *@
+            @if (_currentStep == 1)
+            {
+                <div class="space-y-4">
+                    @if (_type == DataStoreType.SQLite)
+                    {
+                        <h2 class="text-lg font-semibold text-gray-900">SQLite File</h2>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">File Path</label>
+                            <input type="text" @bind="_filePath" placeholder="/path/to/database.db"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors font-mono text-sm" />
+                            <p class="text-xs text-gray-500 mt-1">Absolute path to the SQLite database file on the server.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <h2 class="text-lg font-semibold text-gray-900">Database Connection</h2>
+
+                        <div class="p-4 bg-dusk-blue-900 border border-dusk-blue-700 rounded-lg">
+                            <div class="flex gap-3">
+                                <span class="i-lucide-info size-5 text-dusk-blue-500 shrink-0 mt-0.5"></span>
+                                <div class="text-sm text-dusk-blue-500 space-y-2">
+                                    <p class="font-medium">Database user setup required</p>
+                                    <p>
+                                        Create a dedicated database user for CoreSync with <strong>read and write</strong> permissions.
+                                        CoreSync needs to create triggers@(_type == DataStoreType.SqlServer ? ", tables, or enable change tracking" : " and tables")
+                                        to track data changes.
+                                    </p>
+                                    <p class="text-dusk-blue-400">
+                                        This is a preview release. In future versions, CoreSync will be able to operate with fewer privileges.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Connection String</label>
+                            <textarea @bind="_connectionString" rows="3"
+                                      placeholder="@GetConnectionStringPlaceholder()"
+                                      class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors font-mono text-sm resize-none"></textarea>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Step 3: Tracking mode (SQL Server only) *@
+            @if (_currentStep == 2 && _type == DataStoreType.SqlServer)
+            {
+                <div class="space-y-4">
+                    <h2 class="text-lg font-semibold text-gray-900">Tracking Mode</h2>
+                    <p class="text-sm text-gray-600">Choose how CoreSync tracks changes in your SQL Server database.</p>
+
+                    <div class="space-y-3">
+                        <label class="flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors @(_trackingMode == SqlServerTrackingMode.ChangeTracking ? "border-dusk-blue-500 bg-dusk-blue-900" : "border-gray-200 hover:border-gray-300")">
+                            <input type="radio" name="trackingMode" checked="@(_trackingMode == SqlServerTrackingMode.ChangeTracking)"
+                                   @onchange="@(() => _trackingMode = SqlServerTrackingMode.ChangeTracking)"
+                                   class="mt-1" />
+                            <div>
+                                <div class="font-medium text-gray-900">Native Change Tracking</div>
+                                <p class="text-sm text-gray-500 mt-1">
+                                    Uses SQL Server's built-in change tracking feature. Best performance and lowest overhead.
+                                    Requires ALTER DATABASE permission to enable.
+                                </p>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors @(_trackingMode == SqlServerTrackingMode.Triggers ? "border-dusk-blue-500 bg-dusk-blue-900" : "border-gray-200 hover:border-gray-300")">
+                            <input type="radio" name="trackingMode" checked="@(_trackingMode == SqlServerTrackingMode.Triggers)"
+                                   @onchange="@(() => _trackingMode = SqlServerTrackingMode.Triggers)"
+                                   class="mt-1" />
+                            <div>
+                                <div class="font-medium text-gray-900">Trigger-based Tracking</div>
+                                <p class="text-sm text-gray-500 mt-1">
+                                    Uses database triggers to track changes. Works on all SQL Server editions, including Azure SQL with limited permissions.
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            }
+
+            @* Step: Save (last step) *@
+            @if (_currentStep == _steps.Length - 1 && (_type != DataStoreType.SqlServer || _currentStep > 2 || _steps.Length == _currentStep + 1))
+            {
+                @if (_errorMessages.Count > 0)
+                {
+                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                        @foreach (var error in _errorMessages)
+                        {
+                            <p class="text-sm text-ink-black-500">@error</p>
+                        }
+                    </div>
+                }
+            }
+
+            @* Navigation buttons *@
+            <div class="flex justify-between mt-6">
+                <button @onclick="GoBack"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    @if (_currentStep == 0) { <span>Cancel</span> } else { <span>Back</span> }
+                </button>
+
+                @if (_currentStep < _steps.Length - 1)
+                {
+                    <button @onclick="NextStep" disabled="@(!IsCurrentStepValid())"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                        Next
+                    </button>
+                }
+                else
+                {
+                    <button @onclick="SaveDataStore" disabled="@(!IsCurrentStepValid() || _isSaving)"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+                        @if (_isSaving)
+                        {
+                            <span>Creating...</span>
+                        }
+                        else
+                        {
+                            <span class="i-lucide-save size-4"></span>
+                            <span>Create Data Store</span>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TypeName { get; set; } = "";
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public string EncodedName { get; set; } = "";
+
+    private enum DataStoreType { SQLite, SqlServer, PostgreSQL }
+    private enum SqlServerTrackingMode { Triggers, ChangeTracking }
+
+    private DataStoreType _type;
+    private string _name = "";
+    private string _description = "";
+    private string _filePath = "";
+    private string _connectionString = "";
+    private SqlServerTrackingMode _trackingMode = SqlServerTrackingMode.ChangeTracking;
+    private bool _isSaving;
+    private List<string> _errorMessages = [];
+    private string[] _steps = [];
+    private int _currentStep;
+
+    protected override Task OnInitializedInteractiveAsync()
+    {
+        _name = Uri.UnescapeDataString(EncodedName);
+        _type = TypeName switch
+        {
+            "SqlServer" => DataStoreType.SqlServer,
+            "PostgreSQL" => DataStoreType.PostgreSQL,
+            _ => DataStoreType.SQLite
+        };
+
+        _steps = _type switch
+        {
+            DataStoreType.SQLite => ["General", "File Path"],
+            DataStoreType.SqlServer => ["General", "Connection", "Tracking"],
+            DataStoreType.PostgreSQL => ["General", "Connection"],
+            _ => ["General"]
+        };
+
+        return Task.CompletedTask;
+    }
+
+    private bool IsCurrentStepValid() => _currentStep switch
+    {
+        0 => !string.IsNullOrWhiteSpace(_name),
+        1 when _type == DataStoreType.SQLite => !string.IsNullOrWhiteSpace(_filePath),
+        1 => !string.IsNullOrWhiteSpace(_connectionString),
+        _ => true
+    };
+
+    private void NextStep()
+    {
+        if (_currentStep < _steps.Length - 1)
+            _currentStep++;
+    }
+
+    private void GoBack()
+    {
+        if (_currentStep > 0)
+            _currentStep--;
+        else
+            NavigationManager.NavigateTo("/data-stores");
+    }
+
+    private async Task SaveDataStore()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            var request = new
+            {
+                Name = _name.Trim(),
+                Description = string.IsNullOrWhiteSpace(_description) ? (string?)null : _description.Trim(),
+                Type = (int)_type,
+                ProjectId,
+                FilePath = _type == DataStoreType.SQLite ? _filePath.Trim() : null,
+                ConnectionString = _type != DataStoreType.SQLite ? _connectionString.Trim() : null,
+                TrackingMode = _type == DataStoreType.SqlServer ? (int?)_trackingMode : null
+            };
+
+            var response = await Http.PostAsJsonAsync("api/datastores", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                NavigationManager.NavigateTo("/data-stores");
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private string GetTypeLabel() => _type switch
+    {
+        DataStoreType.SQLite => "SQLite",
+        DataStoreType.SqlServer => "SQL Server",
+        DataStoreType.PostgreSQL => "PostgreSQL",
+        _ => "Unknown"
+    };
+
+    private string GetTypeIconClass() => _type switch
+    {
+        DataStoreType.SQLite => "i-simple-icons-sqlite",
+        DataStoreType.SqlServer => "i-simple-icons-microsoftsqlserver",
+        DataStoreType.PostgreSQL => "i-simple-icons-postgresql",
+        _ => "i-lucide-database"
+    };
+
+    private string GetConnectionStringPlaceholder() => _type switch
+    {
+        DataStoreType.SqlServer => "Server=localhost;Database=MyDb;User Id=coresync;Password=...;TrustServerCertificate=True",
+        DataStoreType.PostgreSQL => "Host=localhost;Database=mydb;Username=coresync;Password=...",
+        _ => ""
+    };
+}

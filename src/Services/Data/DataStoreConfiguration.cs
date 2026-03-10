@@ -6,6 +6,10 @@ public class DataStoreConfiguration
 {
     public int Id { get; set; }
 
+    public required string Name { get; set; }
+
+    public string? Description { get; set; }
+
     public int DataStoreId { get; set; }
 
     public int VersioId { get; set; }
