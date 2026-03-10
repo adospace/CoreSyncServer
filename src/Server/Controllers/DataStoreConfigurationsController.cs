@@ -1,5 +1,6 @@
 using CoreSync;
 using CoreSyncServer.Data;
+using CoreSyncServer.Data.Schema;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,13 +10,16 @@ namespace CoreSyncServer.Controllers;
 [ApiController]
 [Route("api/datastoreconfiguration")]
 [Authorize]
-public class DataStoreConfigurationsController(ApplicationDbContext context) : ControllerBase
+public class DataStoreConfigurationsController(
+    ApplicationDbContext context,
+    IEnumerable<ISchemaReader> schemaReaders,
+    ITableSorter tableSorter) : ControllerBase
 {
     public record ConfigurationListDto(
         int Id,
         string Name,
         string? Description,
-        int VersionId,
+        int Version,
         int TableConfigCount,
         int EndpointCount);
 
@@ -23,11 +27,11 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
         int Id,
         string Name,
         string? Description,
-        int VersionId,
+        int Version,
         int DataStoreId,
         string DataStoreName);
 
-    public record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection);
+    public record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection, int Sort, string? Message);
     public record EndpointDto(Guid Id, string Name, string? Tags);
 
     [HttpGet]
@@ -40,7 +44,7 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
                 c.Id,
                 c.Name,
                 c.Description,
-                c.VersioId,
+                c.Version,
                 c.TableConfigurations.Count,
                 c.Endpoints.Count))
             .ToListAsync();
@@ -61,7 +65,7 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
             config.Id,
             config.Name,
             config.Description,
-            config.VersioId,
+            config.Version,
             config.DataStoreId,
             config.DataStore!.Name));
     }
@@ -82,16 +86,16 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
         {
             Name = request.Name.Trim(),
             DataStoreId = request.DataStoreId,
-            VersioId = 1
+            Version = 1
         };
 
         context.DataStoreConfigurations.Add(config);
         await context.SaveChangesAsync();
 
-        return Ok(new ConfigurationListDto(config.Id, config.Name, config.Description, config.VersioId, 0, 0));
+        return Ok(new ConfigurationListDto(config.Id, config.Name, config.Description, config.Version, 0, 0));
     }
 
-    public record UpdateConfigurationRequest(string Name, string? Description, int VersionId);
+    public record UpdateConfigurationRequest(string Name, string? Description, int Version);
 
     [HttpPut("{id}")]
     public async Task<ActionResult> Update(int id, [FromBody] UpdateConfigurationRequest request)
@@ -104,7 +108,7 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
 
         config.Name = request.Name.Trim();
         config.Description = request.Description?.Trim();
-        config.VersioId = request.VersionId;
+        config.Version = request.Version;
         await context.SaveChangesAsync();
 
         return NoContent();
@@ -133,8 +137,8 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
     {
         var tables = await context.DataStoreTableConfigurations
             .Where(t => t.DataStoreConfigurationId == id)
-            .OrderBy(t => t.Name)
-            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection))
+            .OrderBy(t => t.Sort).ThenBy(t => t.Name)
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection, t.Sort, t.Message))
             .ToListAsync();
 
         return Ok(tables);
@@ -162,7 +166,7 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
         context.DataStoreTableConfigurations.Add(table);
         await context.SaveChangesAsync();
 
-        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncDirection));
+        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncDirection, table.Sort, table.Message));
     }
 
     public record UpdateTableConfigRequest(string Name, string? Schema, int SyncDirection);
@@ -198,6 +202,157 @@ public class DataStoreConfigurationsController(ApplicationDbContext context) : C
         await context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    // Scaffold & Sort
+
+    [HttpPost("{id}/tables/scaffold")]
+    public async Task<ActionResult<List<TableConfigDto>>> ScaffoldTables(int id)
+    {
+        var config = await context.DataStoreConfigurations
+            .Include(c => c.DataStore)
+            .Include(c => c.TableConfigurations)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (config is null) return NotFound();
+
+        var dataStore = config.DataStore!;
+        var connectionString = dataStore switch
+        {
+            SqliteDataStore sqlite => $"Data Source={sqlite.FilePath}",
+            SqlServerDataStore sqlServer => sqlServer.ConnectionString,
+            PostgreSqlDataStore pg => pg.ConnectionString,
+            _ => null
+        };
+
+        if (connectionString is null)
+            return BadRequest(new[] { "Unsupported data store type." });
+
+        var reader = schemaReaders.FirstOrDefault(r => r.StoreType == dataStore.Type);
+        if (reader is null)
+            return BadRequest(new[] { $"No schema reader available for {dataStore.Type}." });
+
+        var schemaTables = await reader.GetTablesAsync(connectionString);
+        var sortResult = tableSorter.Sort(schemaTables);
+
+        // Merge: only add new tables, update sort order and messages for all
+        var existing = config.TableConfigurations.ToDictionary(
+            t => (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()));
+
+        var sortOrder = 0;
+        foreach (var schemaTable in sortResult.SortedTables)
+        {
+            sortOrder++;
+            var key = (schemaTable.Schema?.ToLowerInvariant(), schemaTable.Name.ToLowerInvariant());
+            var hasPrimaryKey = schemaTable.Columns.Any(c => c.IsPrimaryKey);
+
+            var messages = new List<string>();
+            if (!hasPrimaryKey)
+                messages.Add("Primary key missing (required for sync)");
+
+            if (existing.TryGetValue(key, out var existingTable))
+            {
+                existingTable.Sort = sortOrder;
+                existingTable.Message = messages.Count > 0 ? string.Join("; ", messages) : null;
+            }
+            else
+            {
+                var newTable = new DataStoreTableConfiguration
+                {
+                    Name = schemaTable.Name,
+                    Schema = schemaTable.Schema,
+                    SyncDirection = SyncDirection.UploadAndDownload,
+                    DataStoreConfigurationId = id,
+                    Sort = sortOrder,
+                    Message = messages.Count > 0 ? string.Join("; ", messages) : null
+                };
+                context.DataStoreTableConfigurations.Add(newTable);
+                existing[key] = newTable;
+            }
+        }
+
+        // Mark existing tables not found in schema
+        foreach (var table in config.TableConfigurations)
+        {
+            var found = sortResult.SortedTables.Any(s =>
+                string.Equals(s.Schema, table.Schema, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(s.Name, table.Name, StringComparison.OrdinalIgnoreCase));
+            if (!found)
+            {
+                table.Message = "Table not found in database schema";
+                table.Sort = ++sortOrder;
+            }
+        }
+
+        await context.SaveChangesAsync();
+
+        var tables = await context.DataStoreTableConfigurations
+            .Where(t => t.DataStoreConfigurationId == id)
+            .OrderBy(t => t.Sort).ThenBy(t => t.Name)
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection, t.Sort, t.Message))
+            .ToListAsync();
+
+        return Ok(tables);
+    }
+
+    [HttpPost("{id}/tables/sort")]
+    public async Task<ActionResult<List<TableConfigDto>>> SortTables(int id)
+    {
+        var config = await context.DataStoreConfigurations
+            .Include(c => c.DataStore)
+            .Include(c => c.TableConfigurations)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (config is null) return NotFound();
+
+        var dataStore = config.DataStore!;
+        var connectionString = dataStore switch
+        {
+            SqliteDataStore sqlite => $"Data Source={sqlite.FilePath}",
+            SqlServerDataStore sqlServer => sqlServer.ConnectionString,
+            PostgreSqlDataStore pg => pg.ConnectionString,
+            _ => null
+        };
+
+        if (connectionString is null)
+            return BadRequest(new[] { "Unsupported data store type." });
+
+        var reader = schemaReaders.FirstOrDefault(r => r.StoreType == dataStore.Type);
+        if (reader is null)
+            return BadRequest(new[] { $"No schema reader available for {dataStore.Type}." });
+
+        var schemaTables = await reader.GetTablesAsync(connectionString);
+        var sortResult = tableSorter.Sort(schemaTables);
+
+        // Build a lookup from sorted schema tables to their sort order
+        var sortLookup = new Dictionary<(string?, string), int>(
+            sortResult.SortedTables.Select((t, i) => KeyValuePair.Create(
+                (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()), i + 1)));
+
+        var maxSort = sortLookup.Count;
+        foreach (var table in config.TableConfigurations)
+        {
+            var key = (table.Schema?.ToLowerInvariant(), table.Name.ToLowerInvariant());
+            if (sortLookup.TryGetValue(key, out var order))
+            {
+                table.Sort = order;
+            }
+            else
+            {
+                table.Sort = ++maxSort;
+                table.Message = "Table not found in database schema";
+            }
+        }
+
+        await context.SaveChangesAsync();
+
+        var tables = await context.DataStoreTableConfigurations
+            .Where(t => t.DataStoreConfigurationId == id)
+            .OrderBy(t => t.Sort).ThenBy(t => t.Name)
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection, t.Sort, t.Message))
+            .ToListAsync();
+
+        return Ok(tables);
     }
 
     // Endpoints

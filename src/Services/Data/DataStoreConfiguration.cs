@@ -12,7 +12,7 @@ public class DataStoreConfiguration
 
     public int DataStoreId { get; set; }
 
-    public int VersioId { get; set; }
+    public int Version { get; set; }
 
     public DataStore? DataStore { get; set; }
 
@@ -34,6 +34,10 @@ public class DataStoreTableConfiguration
     public string? Schema { get; set; }
 
     public SyncDirection SyncDirection { get; set; }
+
+    public int Sort { get; set; }
+
+    public string? Message { get; set; }
 }
 
 public class Endpoint

@@ -43,13 +43,12 @@
         </div>
 
         @if (ShowPagination && Pagination is not null
-            && Pagination.TotalItemCount.HasValue
-            && Pagination.TotalItemCount.Value > Pagination.ItemsPerPage)
+            && ResolvedItemCount > Pagination.ItemsPerPage)
         {
             <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 text-sm text-gray-500">
                 <span>
-                    Showing @(Pagination.CurrentPageIndex * Pagination.ItemsPerPage + 1)–@(Math.Min((Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage, Pagination.TotalItemCount.Value))
-                    of @Pagination.TotalItemCount.Value
+                    Showing @(Pagination.CurrentPageIndex * Pagination.ItemsPerPage + 1)–@(Math.Min((Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage, ResolvedItemCount))
+                    of @ResolvedItemCount
                 </span>
                 <div class="flex items-center gap-1">
                     <button @onclick="GoToPreviousPage"

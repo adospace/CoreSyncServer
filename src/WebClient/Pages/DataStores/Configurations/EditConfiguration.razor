@@ -69,7 +69,7 @@ else
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                    <input type="number" @bind="_versionId" min="1"
+                    <input type="number" @bind="_version" min="1"
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                 </div>
                 <div class="md:col-span-2">
@@ -119,9 +119,22 @@ else
                                 <span class="i-lucide-plus size-3.5"></span>
                                 Add Table
                             </button>
+                            <button @onclick="ScaffoldTables" disabled="@_isScaffolding"
+                                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
+                                <span class="i-lucide-database size-3.5"></span>
+                                @(_isScaffolding ? "Scaffolding..." : "Scaffold")
+                            </button>
+                            <button @onclick="SortTables" disabled="@_isSorting"
+                                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
+                                <span class="i-lucide-arrow-up-down size-3.5"></span>
+                                @(_isSorting ? "Sorting..." : "Sort")
+                            </button>
                         </ToolbarContent>
                         <ChildContent>
                             <QuickGrid Items="@_filteredTableConfigs" Pagination="@_tablePagination" Theme="custom">
+                                <TemplateColumn Title="Sort" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Sort))" IsDefaultSortColumn="true">
+                                    <span class="text-sm text-gray-500">@context.Sort</span>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Name" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Name))">
                                     <span class="text-sm font-medium text-gray-900">@context.Name</span>
                                 </TemplateColumn>
@@ -132,6 +145,16 @@ else
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetSyncDirectionStyle(context.SyncDirection)">
                                         @GetSyncDirectionLabel(context.SyncDirection)
                                     </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Message" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Message))">
+                                    @if (context.Message is not null)
+                                    {
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">@context.Message</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-sm text-gray-400">—</span>
+                                    }
                                 </TemplateColumn>
                                 <TemplateColumn Title="Actions" Align="Align.End">
                                     <div class="flex items-center justify-end gap-1">
@@ -495,10 +518,10 @@ else
     private ConfigurationDetailDto? _config;
     private string _name = "";
     private string _description = "";
-    private int _versionId;
+    private int _version;
     private string _savedName = "";
     private string _savedDescription = "";
-    private int _savedVersionId;
+    private int _savedVersion;
     private bool _isSaving;
     private List<string> _errorMessages = [];
 
@@ -529,6 +552,10 @@ else
     private bool _isDialogSaving;
     private List<string> _dialogErrorMessages = [];
 
+    // Scaffold & Sort
+    private bool _isScaffolding;
+    private bool _isSorting;
+
     // Delete table
     private bool _showDeleteTableDialog;
     private TableConfigDto? _deletingTable;
@@ -548,12 +575,12 @@ else
     private EndpointDto? _deletingEndpoint;
     private string _deleteEndpointConfirmText = "";
 
-    private record ConfigurationDetailDto(int Id, string Name, string? Description, int VersionId, int DataStoreId, string DataStoreName);
-    private record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection);
+    private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName);
+    private record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection, int Sort, string? Message);
     private record EndpointDto(Guid Id, string Name, string? Tags);
 
     private bool HasUnsavedChanges =>
-        _name != _savedName || _description != _savedDescription || _versionId != _savedVersionId;
+        _name != _savedName || _description != _savedDescription || _version != _savedVersion;
 
     private IQueryable<TableConfigDto>? _filteredTableConfigs =>
         _tableConfigs?.Where(t =>
@@ -584,7 +611,7 @@ else
         {
             _name = _savedName = _config.Name;
             _description = _savedDescription = _config.Description ?? "";
-            _versionId = _savedVersionId = _config.VersionId;
+            _version = _savedVersion = _config.Version;
         }
     }
 
@@ -635,7 +662,7 @@ else
             {
                 Name = _name.Trim(),
                 Description = string.IsNullOrWhiteSpace(_description) ? (string?)null : _description.Trim(),
-                VersionId = _versionId
+                Version = _version
             };
 
             var response = await Http.PutAsJsonAsync($"api/datastoreconfiguration/{ConfigId}", request);
@@ -644,8 +671,8 @@ else
             {
                 _savedName = _name.Trim();
                 _savedDescription = _description;
-                _savedVersionId = _versionId;
-                _config = _config! with { Name = _savedName, Description = _savedDescription, VersionId = _savedVersionId };
+                _savedVersion = _version;
+                _config = _config! with { Name = _savedName, Description = _savedDescription, Version = _savedVersion };
             }
             else
             {
@@ -835,6 +862,65 @@ else
         finally
         {
             _isDialogSaving = false;
+        }
+    }
+
+    // Scaffold & Sort
+    private async Task ScaffoldTables()
+    {
+        _isScaffolding = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsync($"api/datastoreconfiguration/{ConfigId}/tables/scaffold", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _tableConfigs = await response.Content.ReadFromJsonAsync<List<TableConfigDto>>();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isScaffolding = false;
+        }
+    }
+
+    private async Task SortTables()
+    {
+        _isSorting = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsync($"api/datastoreconfiguration/{ConfigId}/tables/sort", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _tableConfigs = await response.Content.ReadFromJsonAsync<List<TableConfigDto>>();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSorting = false;
         }
     }
 

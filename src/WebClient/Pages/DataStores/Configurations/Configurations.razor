@@ -42,8 +42,8 @@
                     @context.Name
                 </a>
             </TemplateColumn>
-            <TemplateColumn Title="Version" SortBy="@(GridSort<ConfigurationListDto>.ByAscending(c => c.VersionId))">
-                <span class="text-sm text-gray-700">v@(context.VersionId)</span>
+            <TemplateColumn Title="Version" SortBy="@(GridSort<ConfigurationListDto>.ByAscending(c => c.Version))">
+                <span class="text-sm text-gray-700">v@(context.Version)</span>
             </TemplateColumn>
             <TemplateColumn Title="Tables" SortBy="@(GridSort<ConfigurationListDto>.ByAscending(c => c.TableConfigCount))">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
@@ -192,7 +192,7 @@
             || c.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
         ).AsQueryable();
 
-    private record ConfigurationListDto(int Id, string Name, string? Description, int VersionId, int TableConfigCount, int EndpointCount);
+    private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount);
 
     protected override async Task OnInitializedInteractiveAsync()
     {
