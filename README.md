@@ -1,2 +1,5 @@
 # CoreSyncServer
-Service and management dashboard to administrate database synchronizations based on CoreSync
+
+A server and management dashboard for administrating database synchronizations powered by CoreSync.
+
+This project is currently under active development and is not yet ready for use or preview.
