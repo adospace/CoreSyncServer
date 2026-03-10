@@ -1,3 +1,4 @@
+using CoreSyncServer.Data.Schema;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,11 @@ namespace CoreSyncServer.Data
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddSignInManager()
                 .AddDefaultTokenProviders();
+
+            services.AddSingleton<ISchemaReader, SqliteSchemaReader>();
+            services.AddSingleton<ISchemaReader, SqlServerSchemaReader>();
+            services.AddSingleton<ISchemaReader, PostgreSqlSchemaReader>();
+            services.AddSingleton<ITableSorter, TableSorter>();
 
             return services;
         }
