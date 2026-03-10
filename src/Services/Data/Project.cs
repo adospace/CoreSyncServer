@@ -8,5 +8,13 @@ public class Project
 
     public DateTime CreatedDate { get; set; }
 
+    public string? Description {get;set;}
+
+    public bool IsEnabled {get;set;}
+
+    public string? Tags {get;set;}
+
     public IList<DataStore> DataStores { get; set; } = [];
+
+
 }

@@ -13,6 +13,8 @@ namespace CoreSyncServer.Data
         public DbSet<DataStore> DataStores => Set<DataStore>();
         public DbSet<DataStoreConfiguration> DataStoreConfigurations => Set<DataStoreConfiguration>();
         public DbSet<DataStoreTableConfiguration> DataStoreTableConfigurations => Set<DataStoreTableConfiguration>();
+        public DbSet<Endpoint> Endpoints => Set<Endpoint>();
+        public DbSet<EndPointAuthentication> EndPointAuthentications => Set<EndPointAuthentication>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -43,6 +45,26 @@ namespace CoreSyncServer.Data
                 .HasOne(t => t.DataStoreConfiguration)
                 .WithMany(c => c.TableConfigurations)
                 .HasForeignKey(t => t.DataStoreConfigurationId);
+
+            // Configure DataStoreConfiguration -> Endpoint relationship
+            builder.Entity<Endpoint>()
+                .HasOne(e => e.DataStoreConfiguration)
+                .WithMany(c => c.Endpoints)
+                .HasForeignKey(e => e.DataStoreConfigurationId);
+
+            // Configure TPH inheritance for EndPointAuthentication using Type as discriminator
+            builder.Entity<EndPointAuthentication>()
+                .UseTphMappingStrategy()
+                .HasDiscriminator(a => a.Type)
+                .HasValue<BasicAuthentication>(EndPointAuthenticationType.Basic)
+                .HasValue<ApiKeyAuthentication>(EndPointAuthenticationType.ApiKey)
+                .HasValue<JwtAuthentication>(EndPointAuthenticationType.Jwt);
+
+            // Configure Endpoint -> EndPointAuthentication relationship
+            builder.Entity<Endpoint>()
+                .HasOne(e => e.Authentication)
+                .WithMany()
+                .HasForeignKey(e => e.AuthenticationId);
 
             var adminRole = new IdentityRole
             {
