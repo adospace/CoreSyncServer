@@ -1,7 +1,13 @@
 <Solution>
-  <Project Path="Services/CoreSyncServer.Services.csproj" />
-  <Folder Name="/Server/" />
+  <Folder Name="/CoreSync/">
+    <Project Path="../CoreSync/src/CoreSync.PostgreSQL/CoreSync.PostgreSQL.csproj" />
+    <Project Path="../CoreSync/src/CoreSync.Sqlite/CoreSync.Sqlite.csproj" />
+    <Project Path="../CoreSync/src/CoreSync.SqlServer/CoreSync.SqlServer.csproj" />
+    <Project Path="../CoreSync/src/CoreSync.SqlServerCT/CoreSync.SqlServerCT.csproj" />
+    <Project Path="../CoreSync/src/CoreSync/CoreSync.csproj" />
+  </Folder>
   <Project Path="../tests/CoreSyncServer.Tests/CoreSyncServer.Tests.csproj" />
   <Project Path="Server/CoreSyncServer.csproj" />
+  <Project Path="Services/CoreSyncServer.Services.csproj" />
   <Project Path="WebClient/CoreSyncServer.Client.csproj" />
 </Solution>
