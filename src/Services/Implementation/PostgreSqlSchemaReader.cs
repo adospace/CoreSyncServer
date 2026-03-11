@@ -1,6 +1,8 @@
+using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Npgsql;
 
-namespace CoreSyncServer.Data.Schema;
+namespace CoreSyncServer.Services.Implementation;
 
 public class PostgreSqlSchemaReader : ISchemaReader
 {

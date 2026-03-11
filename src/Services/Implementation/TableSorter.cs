@@ -1,4 +1,6 @@
-namespace CoreSyncServer.Data.Schema;
+using CoreSyncServer.Services;
+
+namespace CoreSyncServer.Services.Implementation;
 
 /// <summary>
 /// Topologically sorts tables using Kahn's algorithm.

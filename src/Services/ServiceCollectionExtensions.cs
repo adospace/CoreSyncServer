@@ -1,9 +1,10 @@
-using CoreSyncServer.Data.Schema;
+using CoreSyncServer.Data;
+using CoreSyncServer.Services.Implementation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CoreSyncServer.Data
+namespace CoreSyncServer.Services
 {
     public static class ServiceCollectionExtensions
     {

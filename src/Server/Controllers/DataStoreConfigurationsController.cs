@@ -1,6 +1,6 @@
 using CoreSync;
 using CoreSyncServer.Data;
-using CoreSyncServer.Data.Schema;
+using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

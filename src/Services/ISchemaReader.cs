@@ -1,4 +1,7 @@
-namespace CoreSyncServer.Data.Schema;
+using CoreSyncServer.Data;
+using CoreSyncServer.Services.Implementation;
+
+namespace CoreSyncServer.Services;
 
 /// <summary>
 /// Reads table and column metadata from a data store.

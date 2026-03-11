@@ -69,6 +69,11 @@
                        title="Data stores">
                         <span class="i-lucide-database size-4"></span>
                     </a>
+                    <a href="@($"/diagnostics/{context.Id}")"
+                       class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                       title="Diagnostics">
+                        <span class="i-lucide-stethoscope size-4"></span>
+                    </a>
                     <div class="w-px self-stretch bg-gray-200"></div>
                     <button @onclick="() => OpenEditDialog(context)"
                             class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"

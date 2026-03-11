@@ -1,4 +1,6 @@
-namespace CoreSyncServer.Data.Schema;
+using CoreSyncServer.Services.Implementation;
+
+namespace CoreSyncServer.Services;
 
 /// <summary>
 /// Sorts tables based on foreign key relationships so that referenced tables come before

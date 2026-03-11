@@ -1,4 +1,4 @@
-namespace CoreSyncServer.Data.Schema;
+namespace CoreSyncServer.Services.Implementation;
 
 public class TableSchema
 {

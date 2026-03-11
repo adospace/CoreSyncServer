@@ -30,6 +30,8 @@ public abstract class DataStore
     public IList<DataStoreConfiguration> Configurations { get; set; } = [];
 
     public IList<SyncSession> SyncSessions { get; set; } = [];
+
+    public IList<DiagnosticItem> DiagnosticItems { get; set; } = [];
 }
 
 public class SqliteDataStore : DataStore

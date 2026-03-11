@@ -8,6 +8,8 @@ public class SyncSession
     public DateTime StartTime { get; set; }
     public DateTime? EndTime { get; set; }
     public SyncSessionStatus Status { get; set; }
+
+    public IList<DiagnosticItem> DiagnosticItems { get; set; } = [];
 }
 
 public enum SyncSessionStatus

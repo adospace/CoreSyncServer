@@ -1,4 +1,4 @@
-using CoreSyncServer.Data.Schema;
+using CoreSyncServer.Services.Implementation;
 using FluentAssertions;
 
 namespace CoreSyncServer.Tests;

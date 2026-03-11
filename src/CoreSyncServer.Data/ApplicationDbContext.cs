@@ -15,6 +15,7 @@ namespace CoreSyncServer.Data
         public DbSet<DataStoreTableConfiguration> DataStoreTableConfigurations => Set<DataStoreTableConfiguration>();
         public DbSet<Endpoint> Endpoints => Set<Endpoint>();
         public DbSet<EndPointAuthentication> EndPointAuthentications => Set<EndPointAuthentication>();
+        public DbSet<DiagnosticItem> DiagnosticItems => Set<DiagnosticItem>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -59,6 +60,37 @@ namespace CoreSyncServer.Data
                 .HasValue<BasicAuthentication>(EndPointAuthenticationType.Basic)
                 .HasValue<ApiKeyAuthentication>(EndPointAuthenticationType.ApiKey)
                 .HasValue<JwtAuthentication>(EndPointAuthenticationType.Jwt);
+
+            // Configure DiagnosticItem relationships
+            builder.Entity<DiagnosticItem>()
+                .HasOne(d => d.Project)
+                .WithMany(p => p.DiagnosticItems)
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<DiagnosticItem>()
+                .HasOne(d => d.DataStore)
+                .WithMany(ds => ds.DiagnosticItems)
+                .HasForeignKey(d => d.DataStoreId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<DiagnosticItem>()
+                .HasOne(d => d.DataStoreConfiguration)
+                .WithMany(c => c.DiagnosticItems)
+                .HasForeignKey(d => d.DataStoreConfigurationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<DiagnosticItem>()
+                .HasOne(d => d.SyncSession)
+                .WithMany(s => s.DiagnosticItems)
+                .HasForeignKey(d => d.SyncSessionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<DiagnosticItem>()
+                .HasOne(d => d.EndPoint)
+                .WithMany(e => e.DiagnosticItems)
+                .HasForeignKey(d => d.EndpointId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // Configure Endpoint -> EndPointAuthentication relationship
             builder.Entity<Endpoint>()

@@ -1,7 +1,10 @@
+using System.Data.Common;
 using CoreSync;
+using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace CoreSyncServer.Data.Schema;
+namespace CoreSyncServer.Services.Implementation;
 
 public class TableConfigurationService(
     ApplicationDbContext context,
@@ -24,7 +27,16 @@ public class TableConfigurationService(
         if (error is not null)
             return TableConfigurationResult.Failure(error);
 
-        var schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        IReadOnlyList<TableSchema> schemaTables;
+        try
+        {
+            schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        }
+        catch (DbException ex)
+        {
+            return TableConfigurationResult.Failure($"Unable to connect to the database: {ex.Message}");
+        }
+
         schemaTables = FilterChangeTrackingTables(schemaTables);
         var sortResult = tableSorter.Sort(schemaTables);
 
@@ -40,7 +52,10 @@ public class TableConfigurationService(
 
             var messages = new List<string>();
             if (!hasPrimaryKey)
+            {
                 messages.Add("Primary key missing (required for sync)");
+                CreateDiagnostic(config, $"[{schemaTable.Name}] Primary key missing (required for sync)");
+            }
 
             if (existing.TryGetValue(key, out var existingTable))
             {
@@ -72,6 +87,7 @@ public class TableConfigurationService(
             {
                 table.Message = "Table not found in database schema";
                 table.Sort = ++sortOrder;
+                CreateDiagnostic(config, $"[{table.Name}] Table not found in database schema");
             }
         }
 
@@ -94,7 +110,16 @@ public class TableConfigurationService(
         if (error is not null)
             return TableConfigurationResult.Failure(error);
 
-        var schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        IReadOnlyList<TableSchema> schemaTables;
+        try
+        {
+            schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        }
+        catch (DbException ex)
+        {
+            return TableConfigurationResult.Failure($"Unable to connect to the database: {ex.Message}");
+        }
+
         schemaTables = FilterChangeTrackingTables(schemaTables);
         var sortResult = tableSorter.Sort(schemaTables);
 
@@ -114,12 +139,26 @@ public class TableConfigurationService(
             {
                 table.Sort = ++maxSort;
                 table.Message = "Table not found in database schema";
+                CreateDiagnostic(config, $"[{table.Name}] Table not found in database schema");
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
         return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
+    }
+
+    private void CreateDiagnostic(DataStoreConfiguration config, string message)
+    {
+        context.DiagnosticItems.Add(new DiagnosticItem
+        {
+            Message = message,
+            Level = LogItemLevel.Error,
+            Timestamp = DateTime.UtcNow,
+            ProjectId = config.DataStore?.ProjectId,
+            DataStoreId = config.DataStoreId,
+            DataStoreConfigurationId = config.Id
+        });
     }
 
     private (ISchemaReader? reader, string? connectionString, string? error) ResolveSchemaReader(DataStore dataStore)

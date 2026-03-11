@@ -1,4 +1,6 @@
-namespace CoreSyncServer.Data.Schema;
+using CoreSyncServer.Data;
+
+namespace CoreSyncServer.Services;
 
 /// <summary>
 /// Scaffolds and sorts table configurations for a data store configuration

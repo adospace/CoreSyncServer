@@ -1,7 +1,7 @@
-using CoreSyncServer.Client.Pages;
 using CoreSyncServer.Components;
 using CoreSyncServer.Components.Account;
 using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;

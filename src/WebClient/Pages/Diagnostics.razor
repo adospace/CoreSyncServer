@@ -1,0 +1,249 @@
+@page "/diagnostics"
+@page "/diagnostics/{ProjectId:int}"
+@attribute [Authorize]
+@inherits InteractivePage
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Diagnostics</PageTitle>
+
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Diagnostics</h1>
+            <p class="text-gray-500 mt-1">Browse and manage diagnostic items.</p>
+        </div>
+    </div>
+
+    <DataGrid Loading="@(!_initialized)"
+              LoadingMessage="Loading diagnostics..."
+              EmptyIcon="i-lucide-stethoscope"
+              EmptyMessage="No diagnostic items found."
+              ItemCount="@_totalCount"
+              Pagination="@_pagination"
+              FilterPlaceholder="Search messages..."
+              FilterText="@_searchText"
+              FilterTextChanged="@HandleFilter">
+        <ToolbarContent>
+            <div class="flex items-center gap-3 ml-auto">
+                @if (_selectedIds.Count > 0)
+                {
+                    <button @onclick="ResolveSelected"
+                            disabled="@_isResolving"
+                            class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                        <span class="i-lucide-check-circle size-4"></span>
+                        @(_isResolving ? "Resolving..." : $"Resolve Selected ({_selectedIds.Count})")
+                    </button>
+                }
+                <select @bind="_filterLevel" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="">All Levels</option>
+                    @foreach (var level in Enum.GetValues<LogItemLevel>())
+                    {
+                        <option value="@level">@level</option>
+                    }
+                </select>
+                <select @bind="_filterProjectId" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="">All Projects</option>
+                    @if (_projects is not null)
+                    {
+                        @foreach (var project in _projects)
+                        {
+                            <option value="@project.Id">@project.Name</option>
+                        }
+                    }
+                </select>
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <input type="checkbox" @bind="_showResolved" @bind:after="OnFiltersChanged"
+                           class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                    Show resolved
+                </label>
+            </div>
+        </ToolbarContent>
+        <ChildContent>
+            <QuickGrid @ref="_grid" ItemsProvider="@_itemsProvider" Pagination="@_pagination" Theme="custom">
+                <TemplateColumn Title="" Class="w-12">
+                    @if (context.IsResolved)
+                    {
+                        <span class="i-lucide-check-circle size-4 text-green-500" title="Resolved"></span>
+                    }
+                    else
+                    {
+                        <input type="checkbox"
+                               checked="@_selectedIds.Contains(context.Id)"
+                               @onchange="() => ToggleSelection(context.Id)"
+                               class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Level" SortBy="@(GridSort<DiagnosticItemDto>.ByAscending(d => d.Level))">
+                    <span class="@GetLevelBadgeClass(context.Level)">@context.Level</span>
+                </TemplateColumn>
+                <PropertyColumn Property="@(d => d.Message)" Title="Message" />
+                <PropertyColumn Property="@(d => d.ProjectName)" Title="Project" />
+                <TemplateColumn Title="Timestamp" SortBy="@(GridSort<DiagnosticItemDto>.ByDescending(d => d.Timestamp))">
+                    @context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
+                </TemplateColumn>
+                <TemplateColumn Title="Related To">
+                    @{
+                        var parts = new List<string>();
+                        if (context.DataStoreName is not null) parts.Add(context.DataStoreName);
+                        if (context.ConfigurationName is not null) parts.Add(context.ConfigurationName);
+                        if (context.EndpointName is not null) parts.Add(context.EndpointName);
+                    }
+                    @if (parts.Count > 0)
+                    {
+                        <span class="text-sm text-gray-500">@string.Join(" / ", parts)</span>
+                    }
+                </TemplateColumn>
+            </QuickGrid>
+        </ChildContent>
+    </DataGrid>
+</div>
+
+@code {
+    [Parameter]
+    public int? ProjectId { get; set; }
+
+    private QuickGrid<DiagnosticItemDto>? _grid;
+    private PaginationState _pagination = new() { ItemsPerPage = 15 };
+    private GridItemsProvider<DiagnosticItemDto>? _itemsProvider;
+    private bool _initialized;
+    private int _totalCount;
+
+    // Filters
+    private string _searchText = "";
+    private string _filterLevel = "";
+    private string _filterProjectId = "";
+    private bool _showResolved;
+
+    // Selection
+    private HashSet<int> _selectedIds = [];
+    private bool _isResolving;
+
+    // Projects for combo filter
+    private List<ProjectOption>? _projects;
+
+    private record ProjectOption(int Id, string Name);
+    private record DiagnosticItemDto(
+        int Id,
+        string Message,
+        LogItemLevel Level,
+        DateTime Timestamp,
+        bool IsResolved,
+        int? ProjectId,
+        string? ProjectName,
+        string? DataStoreName,
+        string? ConfigurationName,
+        string? EndpointName);
+    private record DiagnosticsPagedResult(List<DiagnosticItemDto> Items, int TotalCount);
+
+    private enum LogItemLevel
+    {
+        Critical,
+        Error,
+        Warning,
+        Information,
+        Debug,
+        Trace
+    }
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        _projects = await Http.GetFromJsonAsync<List<ProjectOption>>("api/projects");
+
+        if (ProjectId.HasValue)
+            _filterProjectId = ProjectId.Value.ToString();
+
+        _itemsProvider = async request =>
+        {
+            var query = BuildQueryString(request.StartIndex / _pagination.ItemsPerPage, _pagination.ItemsPerPage);
+            var result = await Http.GetFromJsonAsync<DiagnosticsPagedResult>($"api/diagnostics{query}", request.CancellationToken);
+            _totalCount = result!.TotalCount;
+
+            return GridItemsProviderResult.From(
+                result.Items,
+                result.TotalCount);
+        };
+
+        _initialized = true;
+    }
+
+    private string BuildQueryString(int page, int pageSize)
+    {
+        var parts = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}",
+            $"showResolved={_showResolved}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+            parts.Add($"message={Uri.EscapeDataString(_searchText)}");
+
+        if (!string.IsNullOrEmpty(_filterLevel) && Enum.TryParse<LogItemLevel>(_filterLevel, out var level))
+            parts.Add($"level={level}");
+
+        if (!string.IsNullOrEmpty(_filterProjectId))
+            parts.Add($"projectId={_filterProjectId}");
+
+        return "?" + string.Join("&", parts);
+    }
+
+    private async Task HandleFilter(string value)
+    {
+        _searchText = value;
+        _selectedIds.Clear();
+        await RefreshGrid();
+    }
+
+    private async Task OnFiltersChanged()
+    {
+        _selectedIds.Clear();
+        await RefreshGrid();
+    }
+
+    private async Task RefreshGrid()
+    {
+        if (_grid is not null)
+            await _grid.RefreshDataAsync();
+    }
+
+    private void ToggleSelection(int id)
+    {
+        if (!_selectedIds.Remove(id))
+            _selectedIds.Add(id);
+    }
+
+    private async Task ResolveSelected()
+    {
+        if (_selectedIds.Count == 0) return;
+
+        _isResolving = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/diagnostics/resolve", new { Ids = _selectedIds.ToArray() });
+            if (response.IsSuccessStatusCode)
+            {
+                _selectedIds.Clear();
+                await RefreshGrid();
+            }
+        }
+        finally
+        {
+            _isResolving = false;
+        }
+    }
+
+    private static string GetLevelBadgeClass(LogItemLevel level) => level switch
+    {
+        LogItemLevel.Critical => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800",
+        LogItemLevel.Error => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700",
+        LogItemLevel.Warning => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800",
+        LogItemLevel.Information => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800",
+        LogItemLevel.Debug => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700",
+        LogItemLevel.Trace => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-500",
+        _ => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+    };
+}

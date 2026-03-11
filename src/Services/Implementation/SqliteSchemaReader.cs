@@ -1,6 +1,8 @@
+using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Microsoft.Data.Sqlite;
 
-namespace CoreSyncServer.Data.Schema;
+namespace CoreSyncServer.Services.Implementation;
 
 public class SqliteSchemaReader : ISchemaReader
 {

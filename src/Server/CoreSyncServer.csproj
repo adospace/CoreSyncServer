@@ -1,31 +1,32 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>aspnet-CoreSyncServer-37b97473-659b-4cb1-9d19-682c05c6beaf</UserSecretsId>
-    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>aspnet-CoreSyncServer-37b97473-659b-4cb1-9d19-682c05c6beaf</UserSecretsId>
+		<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	</PropertyGroup>
 
-  <Target Name="NpmInstall" BeforeTargets="TailwindBuild" Condition="!Exists('node_modules')">
-    <Exec Command="npm install" />
-  </Target>
+	<Target Name="NpmInstall" BeforeTargets="TailwindBuild" Condition="!Exists('node_modules')">
+		<Exec Command="npm install" />
+	</Target>
 
-  <Target Name="TailwindBuild" BeforeTargets="Build">
-    <Exec Command="npm run css:build" />
-  </Target>
+	<Target Name="TailwindBuild" BeforeTargets="Build">
+		<Exec Command="npm run css:build" />
+	</Target>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.2" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.2" />
+		<PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.2" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Services\CoreSyncServer.Services.csproj" />
-    <ProjectReference Include="..\WebClient\CoreSyncServer.Client.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Services\CoreSyncServer.Services.csproj" />
+		<ProjectReference Include="..\WebClient\CoreSyncServer.Client.csproj" />
+	</ItemGroup>
 
 </Project>

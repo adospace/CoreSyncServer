@@ -16,5 +16,5 @@ public class Project
 
     public IList<DataStore> DataStores { get; set; } = [];
 
-
+    public IList<DiagnosticItem> DiagnosticItems { get; set; } = [];
 }

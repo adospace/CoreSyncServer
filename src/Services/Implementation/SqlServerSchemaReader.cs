@@ -1,6 +1,8 @@
+using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Microsoft.Data.SqlClient;
 
-namespace CoreSyncServer.Data.Schema;
+namespace CoreSyncServer.Services.Implementation;
 
 public class SqlServerSchemaReader : ISchemaReader
 {
