@@ -14,6 +14,7 @@ WORKDIR /src
 COPY src/CoreSyncServer.slnx src/
 COPY src/Server/CoreSyncServer.csproj src/Server/
 COPY src/Server/package.json src/Server/
+COPY src/CoreSyncServer.Data/CoreSyncServer.Data.csproj src/CoreSyncServer.Data/
 COPY src/Services/CoreSyncServer.Services.csproj src/Services/
 COPY src/WebClient/CoreSyncServer.Client.csproj src/WebClient/
 
