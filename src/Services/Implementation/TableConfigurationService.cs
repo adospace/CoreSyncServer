@@ -9,7 +9,8 @@ namespace CoreSyncServer.Services.Implementation;
 public class TableConfigurationService(
     ApplicationDbContext context,
     IEnumerable<ISchemaReader> schemaReaders,
-    ITableSorter tableSorter) : ITableConfigurationService
+    ITableSorter tableSorter,
+    IDiagnosticService diagnosticService) : ITableConfigurationService
 {
     private const string ChangeTrackingTablePrefix = "__CORESYNC";
 
@@ -43,6 +44,7 @@ public class TableConfigurationService(
         var existing = config.TableConfigurations.ToDictionary(
             t => (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()));
 
+        var pendingDiagnostics = new List<DiagnosticItem>();
         var sortOrder = 0;
         foreach (var schemaTable in sortResult.SortedTables)
         {
@@ -54,7 +56,7 @@ public class TableConfigurationService(
             if (!hasPrimaryKey)
             {
                 messages.Add("Primary key missing (required for sync)");
-                CreateDiagnostic(config, $"[{schemaTable.Name}] Primary key missing (required for sync)");
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{schemaTable.Name}] Primary key missing (required for sync)"));
             }
 
             if (existing.TryGetValue(key, out var existingTable))
@@ -87,11 +89,14 @@ public class TableConfigurationService(
             {
                 table.Message = "Table not found in database schema";
                 table.Sort = ++sortOrder;
-                CreateDiagnostic(config, $"[{table.Name}] Table not found in database schema");
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        foreach (var diagnostic in pendingDiagnostics)
+            await diagnosticService.CreateAsync(diagnostic, cancellationToken);
 
         return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
     }
@@ -127,6 +132,7 @@ public class TableConfigurationService(
             sortResult.SortedTables.Select((t, i) => KeyValuePair.Create(
                 (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()), i + 1)));
 
+        var pendingDiagnostics = new List<DiagnosticItem>();
         var maxSort = sortLookup.Count;
         foreach (var table in config.TableConfigurations)
         {
@@ -139,27 +145,27 @@ public class TableConfigurationService(
             {
                 table.Sort = ++maxSort;
                 table.Message = "Table not found in database schema";
-                CreateDiagnostic(config, $"[{table.Name}] Table not found in database schema");
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
+        foreach (var diagnostic in pendingDiagnostics)
+            await diagnosticService.CreateAsync(diagnostic, cancellationToken);
+
         return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
     }
 
-    private void CreateDiagnostic(DataStoreConfiguration config, string message)
+    private static DiagnosticItem BuildDiagnostic(DataStoreConfiguration config, string message) => new()
     {
-        context.DiagnosticItems.Add(new DiagnosticItem
-        {
-            Message = message,
-            Level = LogItemLevel.Error,
-            Timestamp = DateTime.UtcNow,
-            ProjectId = config.DataStore?.ProjectId,
-            DataStoreId = config.DataStoreId,
-            DataStoreConfigurationId = config.Id
-        });
-    }
+        Message = message,
+        Level = LogItemLevel.Error,
+        Timestamp = DateTime.UtcNow,
+        ProjectId = config.DataStore?.ProjectId,
+        DataStoreId = config.DataStoreId,
+        DataStoreConfigurationId = config.Id
+    };
 
     private (ISchemaReader? reader, string? connectionString, string? error) ResolveSchemaReader(DataStore dataStore)
     {

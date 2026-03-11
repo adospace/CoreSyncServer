@@ -32,6 +32,7 @@ namespace CoreSyncServer.Services
             services.AddSingleton<ISchemaReader, PostgreSqlSchemaReader>();
             services.AddSingleton<ITableSorter, TableSorter>();
             services.AddScoped<ITableConfigurationService, TableConfigurationService>();
+            services.AddScoped<IDiagnosticService, DiagnosticService>();
 
             return services;
         }

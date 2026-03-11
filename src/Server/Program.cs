@@ -1,6 +1,8 @@
+using CoreSyncServer;
 using CoreSyncServer.Components;
 using CoreSyncServer.Components.Account;
 using CoreSyncServer.Data;
+using CoreSyncServer.Server.Services;
 using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -31,6 +33,9 @@ builder.Services.AddCoreSyncData(options => options.UseNpgsql(connectionString, 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+
+builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
+builder.Services.AddScoped<INotificationService, SmtpNotificationService>();
 
 builder.Services.AddHostedService<MigrationHostedService>();
 
