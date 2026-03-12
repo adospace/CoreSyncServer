@@ -188,8 +188,7 @@ public class TableConfigurationService(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        foreach (var diagnostic in pendingDiagnostics)
-            await diagnosticService.CreateAsync(diagnostic, cancellationToken);
+        await CreateNewDiagnosticsAsync(configurationId, pendingDiagnostics, cancellationToken);
 
         return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
     }
@@ -248,6 +247,25 @@ public class TableConfigurationService(
             await diagnosticService.CreateAsync(diagnostic, cancellationToken);
 
         return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
+    }
+
+    private async Task CreateNewDiagnosticsAsync(int configurationId, List<DiagnosticItem> pendingDiagnostics, CancellationToken cancellationToken)
+    {
+        if (pendingDiagnostics.Count == 0)
+            return;
+
+        var unresolvedMessages = await context.DiagnosticItems
+            .Where(d => d.DataStoreConfigurationId == configurationId && !d.IsResolved)
+            .Select(d => d.Message)
+            .ToListAsync(cancellationToken);
+
+        var unresolvedSet = new HashSet<string>(unresolvedMessages, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var diagnostic in pendingDiagnostics)
+        {
+            if (!unresolvedSet.Contains(diagnostic.Message))
+                await diagnosticService.CreateAsync(diagnostic, cancellationToken);
+        }
     }
 
     private static DiagnosticItem BuildDiagnostic(DataStoreConfiguration config, string message) => new()
