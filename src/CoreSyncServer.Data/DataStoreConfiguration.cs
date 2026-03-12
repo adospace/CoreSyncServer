@@ -35,10 +35,22 @@ public class DataStoreTableConfiguration
 
     public string? Schema { get; set; }
 
-    public SyncDirection SyncDirection { get; set; }
+    public DataStoreTableConfigurationSyncMode SyncMode { get; set; }
+
+    public bool InError { get; set; }
 
     public int Sort { get; set; }
 
     public string? Message { get; set; }
 }
 
+public enum DataStoreTableConfigurationSyncMode
+{
+    UploadAndDownload,
+
+    UploadOnly,
+
+    DownloadOnly,
+
+    NotTracked
+}

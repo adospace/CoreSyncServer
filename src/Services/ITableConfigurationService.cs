@@ -10,6 +10,8 @@ public interface ITableConfigurationService
 {
     Task<TableConfigurationResult> ScaffoldAsync(int configurationId, CancellationToken cancellationToken = default);
 
+    Task<TableConfigurationResult> UpdateAsync(int configurationId, CancellationToken cancellationToken = default);
+
     Task<TableConfigurationResult> SortAsync(int configurationId, CancellationToken cancellationToken = default);
 }
 

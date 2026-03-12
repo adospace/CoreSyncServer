@@ -1,4 +1,5 @@
 using CoreSyncServer.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CoreSyncServer.Services.Implementation;
@@ -25,6 +26,14 @@ public class DiagnosticService(
                 logger.LogError(ex, "Failed to send notification for diagnostic item {Id}", item.Id);
             }
         }
+    }
+
+    public async Task<bool> IsResolvedAsync(int diagnosticItemId, CancellationToken cancellationToken = default)
+    {
+        return await context.DiagnosticItems
+            .Where(d => d.Id == diagnosticItemId)
+            .Select(d => d.IsResolved)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private static string Truncate(string value, int maxLength) =>

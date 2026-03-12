@@ -34,6 +34,7 @@ namespace CoreSyncServer.Services
             services.AddScoped<ITableConfigurationService, TableConfigurationService>();
             services.AddScoped<IDiagnosticService, DiagnosticService>();
             services.AddSingleton<MonitorTask, ConnectivityMonitorTask>();
+            services.AddSingleton<MonitorTask, SchemaUpdateMonitorTask>();
             services.AddSingleton<IMonitorService, MonitorService>();
 
             return services;

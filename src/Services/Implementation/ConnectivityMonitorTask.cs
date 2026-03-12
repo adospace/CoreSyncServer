@@ -9,7 +9,7 @@ namespace CoreSyncServer.Services.Implementation;
 
 public class ConnectivityMonitorTask(IEnumerable<ISchemaReader> schemaReaders, ILogger<ConnectivityMonitorTask> logger) : MonitorTask
 {
-    private readonly ConcurrentDictionary<int, bool> _downStates = new();
+    private readonly ConcurrentDictionary<int, int> _downDiagnosticIds = new();
 
     public override async Task ExecuteAsync(IServiceProvider scopedProvider, CancellationToken cancellationToken)
     {
@@ -53,7 +53,7 @@ public class ConnectivityMonitorTask(IEnumerable<ISchemaReader> schemaReaders, I
         {
             await reader.GetTablesAsync(connectionString, cancellationToken);
 
-            if (_downStates.TryRemove(dataStore.Id, out _))
+            if (_downDiagnosticIds.TryRemove(dataStore.Id, out _))
             {
                 logger.LogInformation("Connectivity check: data store '{Name}' (Id={Id}) is back online.", dataStore.Name, dataStore.Id);
 
@@ -73,23 +73,31 @@ public class ConnectivityMonitorTask(IEnumerable<ISchemaReader> schemaReaders, I
         }
         catch (Exception ex) when (ex is DbException or TimeoutException)
         {
-            var wasAlreadyDown = !_downStates.TryAdd(dataStore.Id, true);
-            if (wasAlreadyDown)
+            if (_downDiagnosticIds.TryGetValue(dataStore.Id, out var existingDiagId))
             {
-                logger.LogDebug("Connectivity check: data store '{Name}' (Id={Id}) still unreachable.", dataStore.Name, dataStore.Id);
-                return;
+                if (!await diagnosticService.IsResolvedAsync(existingDiagId, cancellationToken))
+                {
+                    logger.LogDebug("Connectivity check: data store '{Name}' (Id={Id}) still unreachable.", dataStore.Name, dataStore.Id);
+                    return;
+                }
+
+                logger.LogWarning("Connectivity check: data store '{Name}' (Id={Id}) still unreachable and prior diagnostic was resolved; re-adding.", dataStore.Name, dataStore.Id);
+            }
+            else
+            {
+                logger.LogWarning(ex, "Connectivity check: data store '{Name}' (Id={Id}) is unreachable.", dataStore.Name, dataStore.Id);
             }
 
-            logger.LogWarning(ex, "Connectivity check: data store '{Name}' (Id={Id}) is unreachable.", dataStore.Name, dataStore.Id);
-
-            await diagnosticService.CreateAsync(new DiagnosticItem
+            var diagItem = new DiagnosticItem
             {
                 Message = $"Data store '{dataStore.Name}' is unreachable: {ex.Message}",
                 Level = LogItemLevel.Error,
                 Timestamp = DateTime.UtcNow,
                 DataStoreId = dataStore.Id,
                 ProjectId = dataStore.ProjectId
-            }, cancellationToken);
+            };
+            await diagnosticService.CreateAsync(diagItem, cancellationToken);
+            _downDiagnosticIds[dataStore.Id] = diagItem.Id;
         }
         catch (Exception ex)
         {

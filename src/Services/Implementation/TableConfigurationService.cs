@@ -52,6 +52,7 @@ public class TableConfigurationService(
             var key = (schemaTable.Schema?.ToLowerInvariant(), schemaTable.Name.ToLowerInvariant());
             var hasPrimaryKey = schemaTable.Columns.Any(c => c.IsPrimaryKey);
 
+            var hasError = !hasPrimaryKey;
             var messages = new List<string>();
             if (!hasPrimaryKey)
             {
@@ -62,6 +63,7 @@ public class TableConfigurationService(
             if (existing.TryGetValue(key, out var existingTable))
             {
                 existingTable.Sort = sortOrder;
+                existingTable.InError = hasError;
                 existingTable.Message = messages.Count > 0 ? string.Join("; ", messages) : null;
             }
             else
@@ -70,9 +72,10 @@ public class TableConfigurationService(
                 {
                     Name = schemaTable.Name,
                     Schema = schemaTable.Schema,
-                    SyncDirection = SyncDirection.UploadAndDownload,
+                    SyncMode = DataStoreTableConfigurationSyncMode.UploadAndDownload,
                     DataStoreConfigurationId = configurationId,
                     Sort = sortOrder,
+                    InError = hasError,
                     Message = messages.Count > 0 ? string.Join("; ", messages) : null
                 };
                 context.DataStoreTableConfigurations.Add(newTable);
@@ -87,10 +90,100 @@ public class TableConfigurationService(
                 string.Equals(s.Name, table.Name, StringComparison.OrdinalIgnoreCase));
             if (!found)
             {
+                table.InError = true;
                 table.Message = "Table not found in database schema";
                 table.Sort = ++sortOrder;
                 pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
             }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        foreach (var diagnostic in pendingDiagnostics)
+            await diagnosticService.CreateAsync(diagnostic, cancellationToken);
+
+        return TableConfigurationResult.Ok(await LoadTablesAsync(configurationId, cancellationToken));
+    }
+
+    public async Task<TableConfigurationResult> UpdateAsync(int configurationId, CancellationToken cancellationToken = default)
+    {
+        var config = await context.DataStoreConfigurations
+            .Include(c => c.DataStore)
+            .Include(c => c.TableConfigurations)
+            .FirstOrDefaultAsync(c => c.Id == configurationId, cancellationToken);
+
+        if (config is null)
+            return TableConfigurationResult.NotFound();
+
+        if (config.TableConfigurations.Count == 0)
+            return TableConfigurationResult.Ok([]);
+
+        var (reader, connectionString, error) = ResolveSchemaReader(config.DataStore!);
+        if (error is not null)
+            return TableConfigurationResult.Failure(error);
+
+        IReadOnlyList<TableSchema> schemaTables;
+        try
+        {
+            schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        }
+        catch (DbException ex)
+        {
+            return TableConfigurationResult.Failure($"Unable to connect to the database: {ex.Message}");
+        }
+
+        schemaTables = FilterChangeTrackingTables(schemaTables);
+        var sortResult = tableSorter.Sort(schemaTables);
+
+        var schemaLookup = sortResult.SortedTables.ToDictionary(
+            t => (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()));
+
+        var sortLookup = sortResult.SortedTables
+            .Select((t, i) => (t, i))
+            .ToDictionary(
+                x => (x.t.Schema?.ToLowerInvariant(), x.t.Name.ToLowerInvariant()),
+                x => x.i + 1);
+
+        var pendingDiagnostics = new List<DiagnosticItem>();
+        var maxSort = sortLookup.Count;
+
+        foreach (var table in config.TableConfigurations)
+        {
+            var key = (table.Schema?.ToLowerInvariant(), table.Name.ToLowerInvariant());
+
+            if (!schemaLookup.TryGetValue(key, out var schemaTable))
+            {
+                // Table no longer exists in the database
+                table.InError = true;
+                table.Message = "Table not found in database schema";
+                table.Sort = ++maxSort;
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
+                continue;
+            }
+
+            var hasPrimaryKey = schemaTable.Columns.Any(c => c.IsPrimaryKey);
+            var newSort = sortLookup[key];
+            var messages = new List<string>();
+            var hasError = false;
+
+            if (!hasPrimaryKey)
+            {
+                hasError = true;
+                messages.Add("Primary key missing (required for sync)");
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Primary key missing (required for sync)"));
+            }
+
+            if (table.Sort != newSort)
+            {
+                hasError = true;
+                messages.Add($"Sort order changed (was {table.Sort}, now {newSort})");
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Sort order changed (was {table.Sort}, now {newSort})"));
+            }
+
+            table.Sort = newSort;
+            table.InError = hasError;
+            table.Message = messages.Count > 0 ? string.Join("; ", messages) : null;
+            // SyncMode is intentionally not changed — preserve user selection
         }
 
         await context.SaveChangesAsync(cancellationToken);

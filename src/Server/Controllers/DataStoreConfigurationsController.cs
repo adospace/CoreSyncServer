@@ -20,7 +20,8 @@ public class DataStoreConfigurationsController(
         string? Description,
         int Version,
         int TableConfigCount,
-        int EndpointCount);
+        int EndpointCount,
+        bool InError);
 
     public record ConfigurationDetailDto(
         int Id,
@@ -30,7 +31,7 @@ public class DataStoreConfigurationsController(
         int DataStoreId,
         string DataStoreName);
 
-    public record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection, int Sort, string? Message);
+    public record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
     public record EndpointDto(Guid Id, string Name, string? Tags);
 
     [HttpGet]
@@ -45,7 +46,8 @@ public class DataStoreConfigurationsController(
                 c.Description,
                 c.Version,
                 c.TableConfigurations.Count,
-                c.Endpoints.Count))
+                c.Endpoints.Count,
+                c.TableConfigurations.Any(t => t.InError)))
             .ToListAsync();
 
         return Ok(configurations);
@@ -91,7 +93,7 @@ public class DataStoreConfigurationsController(
         context.DataStoreConfigurations.Add(config);
         await context.SaveChangesAsync();
 
-        return Ok(new ConfigurationListDto(config.Id, config.Name, config.Description, config.Version, 0, 0));
+        return Ok(new ConfigurationListDto(config.Id, config.Name, config.Description, config.Version, 0, 0, false));
     }
 
     public record UpdateConfigurationRequest(string Name, string? Description, int Version);
@@ -137,13 +139,13 @@ public class DataStoreConfigurationsController(
         var tables = await context.DataStoreTableConfigurations
             .Where(t => t.DataStoreConfigurationId == id)
             .OrderBy(t => t.Sort).ThenBy(t => t.Name)
-            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection, t.Sort, t.Message))
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message))
             .ToListAsync();
 
         return Ok(tables);
     }
 
-    public record CreateTableConfigRequest(string Name, string? Schema, int SyncDirection);
+    public record CreateTableConfigRequest(string Name, string? Schema, int SyncMode);
 
     [HttpPost("{id}/tables")]
     public async Task<ActionResult<TableConfigDto>> CreateTable(int id, [FromBody] CreateTableConfigRequest request)
@@ -158,17 +160,17 @@ public class DataStoreConfigurationsController(
         {
             Name = request.Name.Trim(),
             Schema = request.Schema?.Trim(),
-            SyncDirection = (SyncDirection)request.SyncDirection,
+            SyncMode = (DataStoreTableConfigurationSyncMode)request.SyncMode,
             DataStoreConfigurationId = id
         };
 
         context.DataStoreTableConfigurations.Add(table);
         await context.SaveChangesAsync();
 
-        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncDirection, table.Sort, table.Message));
+        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncMode, table.InError, table.Sort, table.Message));
     }
 
-    public record UpdateTableConfigRequest(string Name, string? Schema, int SyncDirection);
+    public record UpdateTableConfigRequest(string Name, string? Schema, int SyncMode);
 
     [HttpPut("{id}/tables/{tableId}")]
     public async Task<ActionResult> UpdateTable(int id, int tableId, [FromBody] UpdateTableConfigRequest request)
@@ -183,7 +185,7 @@ public class DataStoreConfigurationsController(
 
         table.Name = request.Name.Trim();
         table.Schema = request.Schema?.Trim();
-        table.SyncDirection = (SyncDirection)request.SyncDirection;
+        table.SyncMode = (DataStoreTableConfigurationSyncMode)request.SyncMode;
         await context.SaveChangesAsync();
 
         return NoContent();
@@ -212,6 +214,13 @@ public class DataStoreConfigurationsController(
         return ToTableResponse(result);
     }
 
+    [HttpPost("{id}/tables/update")]
+    public async Task<ActionResult<List<TableConfigDto>>> UpdateTables(int id)
+    {
+        var result = await tableConfigurationService.UpdateAsync(id);
+        return ToTableResponse(result);
+    }
+
     [HttpPost("{id}/tables/sort")]
     public async Task<ActionResult<List<TableConfigDto>>> SortTables(int id)
     {
@@ -225,7 +234,7 @@ public class DataStoreConfigurationsController(
             return result.Error == "Configuration not found." ? NotFound() : BadRequest(new[] { result.Error });
 
         var tables = result.Tables
-            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncDirection, t.Sort, t.Message))
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message))
             .ToList();
 
         return Ok(tables);

@@ -161,19 +161,23 @@ else
                                 <TemplateColumn Title="Schema" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Schema))">
                                     <span class="text-sm text-gray-700">@(context.Schema ?? "—")</span>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Sync Direction" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.SyncDirection))">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetSyncDirectionStyle(context.SyncDirection)">
-                                        @GetSyncDirectionLabel(context.SyncDirection)
+                                <TemplateColumn Title="Sync Mode" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.SyncMode))">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetSyncModeStyle(context.SyncMode)">
+                                        @GetSyncModeLabel(context.SyncMode)
                                     </span>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Message" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Message))">
-                                    @if (context.Message is not null)
+                                <TemplateColumn Title="Status" SortBy="@(GridSort<TableConfigDto>.ByDescending(t => t.InError))">
+                                    @if (context.InError)
+                                    {
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title="@context.Message">ERROR</span>
+                                    }
+                                    else if (context.Message is not null)
                                     {
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">@context.Message</span>
                                     }
                                     else
                                     {
-                                        <span class="text-sm text-gray-400">—</span>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">OK</span>
                                     }
                                 </TemplateColumn>
                                 <TemplateColumn Title="Actions" Align="Align.End">
@@ -348,12 +352,13 @@ else
                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Sync Direction</label>
-                        <select @bind="_tableSyncDirection"
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Sync Mode</label>
+                        <select @bind="_tableSyncMode"
                                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
                             <option value="0">Upload and Download</option>
                             <option value="1">Upload Only</option>
                             <option value="2">Download Only</option>
+                            <option value="3">Not Tracked</option>
                         </select>
                     </div>
                 </div>
@@ -568,7 +573,7 @@ else
     private TableConfigDto? _editingTable;
     private string _tableName = "";
     private string _tableSchema = "";
-    private int _tableSyncDirection;
+    private int _tableSyncMode;
     private bool _isDialogSaving;
     private List<string> _dialogErrorMessages = [];
 
@@ -600,7 +605,7 @@ else
     private string _deleteEndpointConfirmText = "";
 
     private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName);
-    private record TableConfigDto(int Id, string Name, string? Schema, int SyncDirection, int Sort, string? Message);
+    private record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
     private record EndpointDto(Guid Id, string Name, string? Tags);
 
     private bool HasUnsavedChanges =>
@@ -821,20 +826,22 @@ else
         _selectedTableIds.Clear();
     }
 
-    // Sync direction helpers
-    private static string GetSyncDirectionLabel(int direction) => direction switch
+    // Sync mode helpers
+    private static string GetSyncModeLabel(int mode) => mode switch
     {
         0 => "Upload & Download",
         1 => "Upload Only",
         2 => "Download Only",
+        3 => "Not Tracked",
         _ => "Unknown"
     };
 
-    private static string GetSyncDirectionStyle(int direction) => direction switch
+    private static string GetSyncModeStyle(int mode) => mode switch
     {
         0 => "bg-dusk-blue-900 text-dusk-blue-500",
         1 => "bg-green-100 text-green-700",
         2 => "bg-purple-100 text-purple-700",
+        3 => "bg-gray-100 text-gray-500",
         _ => "bg-gray-100 text-gray-700"
     };
 
@@ -844,7 +851,7 @@ else
         _editingTable = null;
         _tableName = "";
         _tableSchema = "";
-        _tableSyncDirection = 0;
+        _tableSyncMode = 0;
         _dialogErrorMessages = [];
         _showTableDialog = true;
     }
@@ -854,7 +861,7 @@ else
         _editingTable = table;
         _tableName = table.Name;
         _tableSchema = table.Schema ?? "";
-        _tableSyncDirection = table.SyncDirection;
+        _tableSyncMode = table.SyncMode;
         _dialogErrorMessages = [];
         _showTableDialog = true;
     }
@@ -877,7 +884,7 @@ else
             {
                 Name = _tableName.Trim(),
                 Schema = string.IsNullOrWhiteSpace(_tableSchema) ? (string?)null : _tableSchema.Trim(),
-                SyncDirection = _tableSyncDirection
+                SyncMode = _tableSyncMode
             };
 
             HttpResponseMessage response;
