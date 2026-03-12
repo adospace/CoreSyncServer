@@ -86,6 +86,14 @@ jobs:
             type=sha
             type=raw,value=latest
 
+      - name: Delete old container images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: coresyncserver
+          package-type: container
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: false
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
