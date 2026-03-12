@@ -29,7 +29,8 @@
               FilterPlaceholder="Search projects..."
               FilterText="@_searchText"
               FilterTextChanged="@HandleFilter"
-              RowClickable="true">
+              RowClickable="true"
+              OnRefresh="@LoadProjects">
         <QuickGrid Items="@_filteredProjects" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<ProjectDto>.ByAscending(p => p.Name))">
                 <a href="@($"/project/datastores/{context.Id}")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>

@@ -112,7 +112,8 @@ else
                               Pagination="@_tablePagination"
                               FilterPlaceholder="Search tables..."
                               FilterText="@_tableSearchText"
-                              FilterTextChanged="@(v => _tableSearchText = v)">
+                              FilterTextChanged="@(v => _tableSearchText = v)"
+                              OnRefresh="@LoadTableConfigs">
                         <ToolbarContent>
                             <button @onclick="OpenCreateTableDialog"
                                     class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
@@ -132,11 +133,6 @@ else
                             @if (_selectedTableIds.Count > 0)
                             {
                                 <div class="h-6 w-px bg-gray-300"></div>
-                                <button @onclick="ToggleSelectAllTables"
-                                        class="text-gray-600 hover:text-gray-800 font-medium py-1.5 px-3 rounded-lg hover:bg-gray-100 transition-colors text-sm flex items-center gap-1.5">
-                                    <span class="i-lucide-check-square size-3.5"></span>
-                                    @(AllVisibleTablesSelected ? "Deselect All" : "Select All")
-                                </button>
                                 <button @onclick="MarkSelectedTablesForDeletion"
                                         class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
                                     <span class="i-lucide-trash-2 size-3.5"></span>
@@ -146,11 +142,22 @@ else
                         </ToolbarContent>
                         <ChildContent>
                             <QuickGrid Items="@_filteredTableConfigs" Pagination="@_tablePagination" Theme="custom">
-                                <TemplateColumn Title="" Align="Align.Center">
-                                    <input type="checkbox"
-                                           checked="@_selectedTableIds.Contains(context.Id)"
-                                           @onchange="() => ToggleTableSelection(context.Id)"
-                                           class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                <TemplateColumn Align="Align.Center">
+                                    <HeaderTemplate>
+                                        @if (_filteredTableConfigs?.Any() == true)
+                                        {
+                                            <input type="checkbox"
+                                                   checked="@AllVisibleTablesSelected"
+                                                   @onchange="ToggleSelectAllTables"
+                                                   class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                        }
+                                    </HeaderTemplate>
+                                    <ChildContent>
+                                        <input type="checkbox"
+                                               checked="@_selectedTableIds.Contains(context.Id)"
+                                               @onchange="() => ToggleTableSelection(context.Id)"
+                                               class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                    </ChildContent>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Sort" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Sort))" IsDefaultSortColumn="true">
                                     <span class="text-sm text-gray-500">@context.Sort</span>
@@ -208,7 +215,8 @@ else
                               Pagination="@_endpointPagination"
                               FilterPlaceholder="Search endpoints..."
                               FilterText="@_endpointSearchText"
-                              FilterTextChanged="@(v => _endpointSearchText = v)">
+                              FilterTextChanged="@(v => _endpointSearchText = v)"
+                              OnRefresh="@LoadEndpoints">
                         <ToolbarContent>
                             <button @onclick="OpenCreateEndpointDialog"
                                     class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">

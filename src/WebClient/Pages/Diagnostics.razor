@@ -21,11 +21,13 @@
               EmptyIcon="i-lucide-stethoscope"
               EmptyMessage="No diagnostic items found."
               Pagination="@_pagination"
+              PageSizeOptions="@(new[] { 15, 25, 50 })"
               FilterPlaceholder="Search messages..."
               FilterText="@_searchText"
-              FilterTextChanged="@HandleFilter">
+              FilterTextChanged="@HandleFilter"
+              OnRefresh="@RefreshGrid">
         <ToolbarContent>
-            <div class="flex items-center gap-3 ml-auto">
+            <div class="flex items-center gap-3">
                 @if (_selectedIds.Count > 0)
                 {
                     <button @onclick="ResolveSelected"
@@ -54,27 +56,38 @@
                         }
                     }
                 </select>
-                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-                    <input type="checkbox" @bind="_showResolved" @bind:after="OnFiltersChanged"
-                           class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
-                    Show resolved
-                </label>
+                <select @bind="_filterResolved" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="unresolved">Unresolved Only</option>
+                    <option value="all">Show All</option>
+                </select>
             </div>
         </ToolbarContent>
         <ChildContent>
             <QuickGrid @ref="_grid" ItemsProvider="@_itemsProvider" Pagination="@_pagination" Theme="custom">
-                <TemplateColumn Title="" Class="w-12">
-                    @if (context.IsResolved)
-                    {
-                        <span class="i-lucide-check-circle size-4 text-green-500" title="Resolved"></span>
-                    }
-                    else
-                    {
-                        <input type="checkbox"
-                               checked="@_selectedIds.Contains(context.Id)"
-                               @onchange="() => ToggleSelection(context.Id)"
-                               class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
-                    }
+                <TemplateColumn Class="w-12">
+                    <HeaderTemplate>
+                        @if (_selectableIdsOnPage.Count > 0)
+                        {
+                            <input type="checkbox"
+                                   checked="@_allOnPageSelected"
+                                   @onchange="ToggleSelectAll"
+                                   class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                        }
+                    </HeaderTemplate>
+                    <ChildContent>
+                        @if (context.IsResolved)
+                        {
+                            <span class="i-lucide-check-circle size-4 text-green-500" title="Resolved"></span>
+                        }
+                        else
+                        {
+                            <input type="checkbox"
+                                   checked="@_selectedIds.Contains(context.Id)"
+                                   @onchange="() => ToggleSelection(context.Id)"
+                                   class="rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                        }
+                    </ChildContent>
                 </TemplateColumn>
                 <TemplateColumn Title="Level" SortBy="@(GridSort<DiagnosticItemDto>.ByAscending(d => d.Level))">
                     <span class="@GetLevelBadgeClass(context.Level)">@context.Level</span>
@@ -114,11 +127,15 @@
     private string _searchText = "";
     private string _filterLevel = "";
     private string _filterProjectId = "";
-    private bool _showResolved;
+    private string _filterResolved = "unresolved";
 
     // Selection
     private HashSet<int> _selectedIds = [];
+    private List<int> _selectableIdsOnPage = [];
     private bool _isResolving;
+
+    private bool _allOnPageSelected =>
+        _selectableIdsOnPage.Count > 0 && _selectableIdsOnPage.All(_selectedIds.Contains);
 
     // Projects for combo filter
     private List<ProjectOption>? _projects;
@@ -159,8 +176,13 @@
             var query = BuildQueryString(request.StartIndex / _pagination.ItemsPerPage, _pagination.ItemsPerPage);
             var result = await Http.GetFromJsonAsync<DiagnosticsPagedResult>($"api/diagnostics{query}", request.CancellationToken);
 
+            _selectableIdsOnPage = result!.Items
+                .Where(d => !d.IsResolved)
+                .Select(d => d.Id)
+                .ToList();
+
             return GridItemsProviderResult.From(
-                result!.Items,
+                result.Items,
                 result.TotalCount);
         };
 
@@ -173,7 +195,7 @@
         {
             $"page={page}",
             $"pageSize={pageSize}",
-            $"showResolved={_showResolved}"
+            $"showResolved={_filterResolved == "all"}"
         };
 
         if (!string.IsNullOrWhiteSpace(_searchText))
@@ -205,6 +227,20 @@
     {
         if (_grid is not null)
             await _grid.RefreshDataAsync();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (_allOnPageSelected)
+        {
+            foreach (var id in _selectableIdsOnPage)
+                _selectedIds.Remove(id);
+        }
+        else
+        {
+            foreach (var id in _selectableIdsOnPage)
+                _selectedIds.Add(id);
+        }
     }
 
     private void ToggleSelection(int id)

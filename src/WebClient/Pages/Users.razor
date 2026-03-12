@@ -29,7 +29,8 @@
               Pagination="@_pagination"
               FilterPlaceholder="Search users..."
               FilterText="@_searchText"
-              FilterTextChanged="@HandleFilter">
+              FilterTextChanged="@HandleFilter"
+              OnRefresh="@LoadUsers">
         <QuickGrid Items="@_filteredUsers" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Username" SortBy="@(GridSort<UserDto>.ByAscending(u => u.UserName))">
                 <div class="flex items-center gap-3">

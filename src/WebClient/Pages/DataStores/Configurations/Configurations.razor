@@ -36,7 +36,8 @@
               FilterPlaceholder="Search configurations..."
               FilterText="@_searchText"
               FilterTextChanged="@HandleFilter"
-              RowClickable="true">
+              RowClickable="true"
+              OnRefresh="@LoadConfigurations">
         <QuickGrid Items="@_filteredConfigurations" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<ConfigurationListDto>.ByAscending(c => c.Name))">
                 <a href="/data-stores/configurations/edit/@context.Id" class="row-link text-sm font-medium text-dusk-blue-500 hover:text-dusk-blue-600">

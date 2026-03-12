@@ -1,5 +1,5 @@
 <div class="datagrid-root @(RowClickable ? "datagrid-clickable" : "") bg-white rounded border border-gray-100 overflow-hidden">
-    @if (ShowFilter || ToolbarContent is not null)
+    @if (ShowFilter || ToolbarContent is not null || OnRefresh.HasDelegate)
     {
         <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
             @if (ShowFilter)
@@ -15,7 +15,18 @@
                                   outline-none transition-colors" />
                 </div>
             }
-            @ToolbarContent
+            @if (ToolbarContent is not null || OnRefresh.HasDelegate)
+            {
+                <div class="flex items-center gap-3 ml-auto">
+                    @ToolbarContent
+                    @if (OnRefresh.HasDelegate)
+                    {
+                        <button @onclick="OnRefresh" class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Refresh">
+                            <span class="i-lucide-refresh-cw size-4"></span>
+                        </button>
+                    }
+                </div>
+            }
         </div>
     }
 
@@ -43,24 +54,43 @@
         </div>
 
         @if (ShowPagination && Pagination is not null
-            && ResolvedItemCount > Pagination.ItemsPerPage)
+            && (ItemCount is null || ResolvedItemCount > Pagination.ItemsPerPage))
         {
             <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 text-sm text-gray-500">
                 <span>
-                    Showing @(Pagination.CurrentPageIndex * Pagination.ItemsPerPage + 1)–@(Math.Min((Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage, ResolvedItemCount))
-                    of @ResolvedItemCount
+                    @if (ResolvedItemCount >= 0)
+                    {
+                        @($"Showing {Pagination.CurrentPageIndex * Pagination.ItemsPerPage + 1}–{Math.Min((Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage, ResolvedItemCount)} of {ResolvedItemCount}")
+                    }
                 </span>
-                <div class="flex items-center gap-1">
-                    <button @onclick="GoToPreviousPage"
-                            disabled="@(Pagination.CurrentPageIndex == 0)"
-                            class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                        <span class="i-lucide-chevron-left size-4"></span>
-                    </button>
-                    <button @onclick="GoToNextPage"
-                            disabled="@(Pagination.CurrentPageIndex >= Pagination.LastPageIndex)"
-                            class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                        <span class="i-lucide-chevron-right size-4"></span>
-                    </button>
+                <div class="flex items-center gap-4">
+                    @if (PageSizeOptions.Length > 1)
+                    {
+                        <div class="flex items-center gap-2">
+                            <span>Rows:</span>
+                            <select @bind="_currentPageSize" @bind:after="OnPageSizeChanged"
+                                    class="border border-gray-200 rounded-md px-2 py-1 text-sm
+                                           focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500
+                                           outline-none bg-white">
+                                @foreach (var size in PageSizeOptions)
+                                {
+                                    <option value="@size">@size</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="flex items-center gap-1">
+                        <button @onclick="GoToPreviousPage"
+                                disabled="@(Pagination.CurrentPageIndex == 0)"
+                                class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <span class="i-lucide-chevron-left size-4"></span>
+                        </button>
+                        <button @onclick="GoToNextPage"
+                                disabled="@(Pagination.CurrentPageIndex >= Pagination.LastPageIndex)"
+                                class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <span class="i-lucide-chevron-right size-4"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
         }
@@ -81,6 +111,9 @@
     public bool ShowPagination { get; set; } = true;
 
     [Parameter]
+    public int[] PageSizeOptions { get; set; } = [10, 25, 50];
+
+    [Parameter]
     public bool ShowFilter { get; set; } = true;
 
     [Parameter]
@@ -91,6 +124,9 @@
 
     [Parameter]
     public EventCallback<string> FilterTextChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefresh { get; set; }
 
     [Parameter]
     public bool Loading { get; set; }
@@ -128,6 +164,23 @@
     {
         var value = e.Value?.ToString() ?? "";
         await FilterTextChanged.InvokeAsync(value);
+    }
+
+    private int _currentPageSize;
+
+    protected override void OnParametersSet()
+    {
+        if (Pagination is not null)
+            _currentPageSize = Pagination.ItemsPerPage;
+    }
+
+    private async Task OnPageSizeChanged()
+    {
+        if (Pagination is not null)
+        {
+            Pagination.ItemsPerPage = _currentPageSize;
+            await Pagination.SetCurrentPageIndexAsync(0);
+        }
     }
 
     private async Task GoToPreviousPage()

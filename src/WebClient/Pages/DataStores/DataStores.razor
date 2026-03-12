@@ -40,7 +40,8 @@
               FilterPlaceholder="Search data stores..."
               FilterText="@_searchText"
               FilterTextChanged="@HandleFilter"
-              RowClickable="true">
+              RowClickable="true"
+              OnRefresh="@LoadDataStores">
         <QuickGrid Items="@_filteredDataStores" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Name))">
                 <a href="@($"/data-stores/{context.Id}/configurations")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>

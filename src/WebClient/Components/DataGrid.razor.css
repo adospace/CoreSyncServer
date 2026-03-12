@@ -162,6 +162,10 @@
     text-align: center;
 }
 
+::deep th[align="center"] .col-header-content {
+    justify-content: center;
+}
+
 /* QuickGrid justify classes */
 ::deep td.col-justify-center {
     text-align: center;
