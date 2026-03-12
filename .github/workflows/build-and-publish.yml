@@ -92,7 +92,7 @@ jobs:
           package-name: coresyncserver
           package-type: container
           min-versions-to-keep: 0
-          delete-only-untagged-versions: false
+          delete-only-untagged-versions: true
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
