@@ -199,7 +199,7 @@
 
     private async Task GoToNextPage()
     {
-        if (CanGoToNextPage)
+        if (Pagination is not null && CanGoToNextPage)
         {
             await Pagination.SetCurrentPageIndexAsync(Pagination.CurrentPageIndex + 1);
         }
