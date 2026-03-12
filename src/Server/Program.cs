@@ -37,7 +37,11 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddScoped<INotificationService, SmtpNotificationService>();
 
+builder.Services.AddSingleton<MigrationComplete>();
 builder.Services.AddHostedService<MigrationHostedService>();
+
+builder.Services.Configure<MonitorSettings>(builder.Configuration.GetSection("Monitor"));
+builder.Services.AddHostedService<CoreSyncServer.Server.Services.MonitorHostedService>();
 
 builder.Services.AddScoped(sp =>
 {

@@ -18,7 +18,8 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
         string ProjectName,
         int ProjectId,
         int ConfigurationsCount,
-        int SyncSessionsCount);
+        int SyncSessionsCount,
+        bool IsMonitorEnabled);
 
     [HttpGet]
     public async Task<ActionResult<List<DataStoreDto>>> GetAll([FromQuery] int? projectId)
@@ -42,7 +43,8 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
                 d.Project!.Name,
                 d.ProjectId,
                 d.Configurations.Count,
-                d.SyncSessions.Count))
+                d.SyncSessions.Count,
+                d.IsMonitorEnabled))
             .ToListAsync();
 
         return Ok(dataStores);
@@ -108,7 +110,8 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
             project.Name,
             dataStore.ProjectId,
             0,
-            0));
+            0,
+            dataStore.IsMonitorEnabled));
     }
 
     public record UpdateDataStoreRequest(string Name, string? Description);

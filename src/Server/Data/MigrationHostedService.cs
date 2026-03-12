@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreSyncServer.Data;
 
-public class MigrationHostedService(IServiceProvider serviceProvider, ILogger<MigrationHostedService> logger) : BackgroundService
+public class MigrationHostedService(IServiceProvider serviceProvider, MigrationComplete migrationComplete, ILogger<MigrationHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -15,6 +15,7 @@ public class MigrationHostedService(IServiceProvider serviceProvider, ILogger<Mi
             await dbContext.Database.MigrateAsync(stoppingToken);
 
             logger.LogInformation("Database migrations applied successfully.");
+            migrationComplete.Signal();
         }
         catch (Exception ex)
         {

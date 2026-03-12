@@ -20,7 +20,6 @@
               LoadingMessage="Loading diagnostics..."
               EmptyIcon="i-lucide-stethoscope"
               EmptyMessage="No diagnostic items found."
-              ItemCount="@_totalCount"
               Pagination="@_pagination"
               FilterPlaceholder="Search messages..."
               FilterText="@_searchText"
@@ -110,7 +109,6 @@
     private PaginationState _pagination = new() { ItemsPerPage = 15 };
     private GridItemsProvider<DiagnosticItemDto>? _itemsProvider;
     private bool _initialized;
-    private int _totalCount;
 
     // Filters
     private string _searchText = "";
@@ -160,10 +158,9 @@
         {
             var query = BuildQueryString(request.StartIndex / _pagination.ItemsPerPage, _pagination.ItemsPerPage);
             var result = await Http.GetFromJsonAsync<DiagnosticsPagedResult>($"api/diagnostics{query}", request.CancellationToken);
-            _totalCount = result!.TotalCount;
 
             return GridItemsProviderResult.From(
-                result.Items,
+                result!.Items,
                 result.TotalCount);
         };
 
