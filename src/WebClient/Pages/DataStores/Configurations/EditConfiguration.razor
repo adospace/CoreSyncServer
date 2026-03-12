@@ -142,7 +142,7 @@ else
                         </ToolbarContent>
                         <ChildContent>
                             <QuickGrid Items="@_filteredTableConfigs" Pagination="@_tablePagination" Theme="custom">
-                                <TemplateColumn Align="Align.Center">
+                                <TemplateColumn Class="w-12" Align="Align.Center">
                                     <HeaderTemplate>
                                         @if (_filteredTableConfigs?.Any() == true)
                                         {

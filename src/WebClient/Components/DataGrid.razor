@@ -86,7 +86,7 @@
                             <span class="i-lucide-chevron-left size-4"></span>
                         </button>
                         <button @onclick="GoToNextPage"
-                                disabled="@(Pagination.CurrentPageIndex >= Pagination.LastPageIndex)"
+                                disabled="@(!CanGoToNextPage)"
                                 class="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                             <span class="i-lucide-chevron-right size-4"></span>
                         </button>
@@ -160,6 +160,12 @@
     private int ResolvedItemCount =>
         ItemCount ?? (int)(Pagination?.TotalItemCount ?? -1);
 
+    private bool CanGoToNextPage =>
+        Pagination is not null
+        && (ResolvedItemCount < 0
+            ? Pagination.CurrentPageIndex < Pagination.LastPageIndex
+            : (Pagination.CurrentPageIndex + 1) * Pagination.ItemsPerPage < ResolvedItemCount);
+
     private async Task OnFilterInput(ChangeEventArgs e)
     {
         var value = e.Value?.ToString() ?? "";
@@ -193,7 +199,7 @@
 
     private async Task GoToNextPage()
     {
-        if (Pagination is not null && Pagination.CurrentPageIndex < Pagination.LastPageIndex)
+        if (CanGoToNextPage)
         {
             await Pagination.SetCurrentPageIndexAsync(Pagination.CurrentPageIndex + 1);
         }
