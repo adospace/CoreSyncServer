@@ -48,6 +48,7 @@ namespace CoreSyncServer.Services
             services.AddSingleton<ITableSorter, TableSorter>();
             services.AddScoped<ITableConfigurationService, TableConfigurationService>();
             services.AddScoped<IDiagnosticService, DiagnosticService>();
+            services.AddScoped<IProvisionService, ProvisionService>();
             services.AddSingleton<MonitorTask, ConnectivityMonitorTask>();
             services.AddSingleton<MonitorTask, SchemaUpdateMonitorTask>();
             services.AddSingleton<IMonitorService, MonitorService>();

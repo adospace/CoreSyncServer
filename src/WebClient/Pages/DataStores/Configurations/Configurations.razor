@@ -20,11 +20,23 @@
             </h1>
             <p class="text-gray-500 mt-1">Manage configurations for this data store.</p>
         </div>
-        <button @onclick="OpenCreateDialog"
-                class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
-            <span class="i-lucide-plus size-4"></span>
-            New Configuration
-        </button>
+        <div class="flex items-center gap-2">
+            <button @onclick="ApplyProvision" disabled="@_isProvisioning"
+                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                <span class="i-lucide-database size-4"></span>
+                @(_isProvisioning ? "Applying..." : "Apply Provision")
+            </button>
+            <button @onclick="OpenRemoveProvisionDialog" disabled="@_isProvisioning"
+                    class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                <span class="i-lucide-database-zap size-4"></span>
+                Remove Provision
+            </button>
+            <button @onclick="OpenCreateDialog"
+                    class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+                <span class="i-lucide-plus size-4"></span>
+                New Configuration
+            </button>
+        </div>
     </div>
 
     <DataGrid Loading="@(_configurations is null)"
@@ -179,6 +191,63 @@
     </div>
 }
 
+@* Remove provision warning dialog *@
+@if (_showRemoveProvisionDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseRemoveProvisionDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                        <span class="i-lucide-alert-triangle size-5 text-red-600"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Remove Provision</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-2">
+                    This will remove all sync tracking infrastructure from the data store database. <strong>This operation could cause synchronization to stop working</strong> for any clients currently syncing with this data store.
+                </p>
+                <p class="text-sm text-gray-600 mb-4">
+                    You will need to re-apply provision and clients may need to perform a full re-sync.
+                </p>
+
+                @if (_provisionErrorMessages.Count > 0)
+                {
+                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                        @foreach (var error in _provisionErrorMessages)
+                        {
+                            <p class="text-sm text-ink-black-500">@error</p>
+                        }
+                    </div>
+                }
+
+                <div class="flex justify-end gap-3">
+                    <button @onclick="CloseRemoveProvisionDialog"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick="RemoveProvision" disabled="@_isProvisioning"
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
+                        @(_isProvisioning ? "Removing..." : "Remove Provision")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Provision result toast *@
+@if (_provisionSuccessMessage is not null)
+{
+    <div class="fixed bottom-4 right-4 z-50 p-4 bg-green-100 border border-green-300 rounded-lg shadow-lg flex items-center gap-2">
+        <span class="i-lucide-check-circle size-5 text-green-600"></span>
+        <span class="text-sm text-green-800">@_provisionSuccessMessage</span>
+        <button @onclick="() => _provisionSuccessMessage = null" class="ml-2 text-green-600 hover:text-green-800">
+            <span class="i-lucide-x size-4"></span>
+        </button>
+    </div>
+}
+
 @code {
     [Parameter] public int DataStoreId { get; set; }
 
@@ -197,6 +266,12 @@
     private bool _showDeleteDialog;
     private ConfigurationListDto? _selectedConfig;
     private string _deleteConfirmText = "";
+
+    // Provision
+    private bool _isProvisioning;
+    private bool _showRemoveProvisionDialog;
+    private List<string> _provisionErrorMessages = [];
+    private string? _provisionSuccessMessage;
 
     private IQueryable<ConfigurationListDto>? _filteredConfigurations =>
         _configurations?.Where(c =>
@@ -312,6 +387,79 @@
         finally
         {
             _isSaving = false;
+        }
+    }
+
+    // Provision
+    private async Task ApplyProvision()
+    {
+        _isProvisioning = true;
+        _provisionSuccessMessage = null;
+        _provisionErrorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsync($"api/provision/{DataStoreId}/apply", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _provisionSuccessMessage = "Provision applied successfully.";
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _provisionErrorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _provisionErrorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isProvisioning = false;
+        }
+    }
+
+    private void OpenRemoveProvisionDialog()
+    {
+        _provisionErrorMessages = [];
+        _showRemoveProvisionDialog = true;
+    }
+
+    private void CloseRemoveProvisionDialog()
+    {
+        _showRemoveProvisionDialog = false;
+        _provisionErrorMessages = [];
+    }
+
+    private async Task RemoveProvision()
+    {
+        _isProvisioning = true;
+        _provisionErrorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsync($"api/provision/{DataStoreId}/remove", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseRemoveProvisionDialog();
+                _provisionSuccessMessage = "Provision removed successfully.";
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _provisionErrorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _provisionErrorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isProvisioning = false;
         }
     }
 }
