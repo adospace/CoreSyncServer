@@ -1,1 +1,11 @@
-@* Home page route moved to WebClient/Pages/Dashboard.razor *@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject NavigationManager NavigationManager
+
+@code {
+    protected override void OnInitialized()
+    {
+        NavigationManager.NavigateTo("/dashboard", replace: true);
+    }
+}
