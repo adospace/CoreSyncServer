@@ -232,6 +232,11 @@ else
                                 <TemplateColumn Title="Tags" SortBy="@(GridSort<EndpointDto>.ByAscending(e => e.Tags))">
                                     <span class="text-sm text-gray-700">@(context.Tags ?? "—")</span>
                                 </TemplateColumn>
+                                <TemplateColumn Title="Auth">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetAuthTypeStyle(context.Authentication?.Type ?? -1)">
+                                        @GetAuthTypeLabel(context.Authentication?.Type ?? -1)
+                                    </span>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Actions" Align="Align.End">
                                     <div class="flex items-center justify-end gap-1">
                                         <button @onclick="() => OpenEditEndpointDialog(context)"
@@ -448,7 +453,7 @@ else
 {
     <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseEndpointDialog"></div>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-lg" @onclick:stopPropagation="true">
             <div class="p-6">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
@@ -468,6 +473,60 @@ else
                         <input type="text" @bind="_endpointTags" placeholder="Optional tags (comma-separated)"
                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+                        <select @bind="_endpointAuthType"
+                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
+                            <option value="-1">None</option>
+                            <option value="0">Basic</option>
+                            <option value="1">API Key</option>
+                            <option value="2">JWT</option>
+                        </select>
+                    </div>
+                    @if (_endpointAuthType == 0)
+                    {
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                            <input type="text" @bind="_endpointAuthUsername" placeholder="Username"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <input type="password" @bind="_endpointAuthPassword" placeholder="Password"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                    }
+                    else if (_endpointAuthType == 1)
+                    {
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                            <input type="password" @bind="_endpointAuthApiKey" placeholder="API Key"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                    }
+                    else if (_endpointAuthType == 2)
+                    {
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">JWKS Endpoint</label>
+                            <input type="text" @bind="_endpointAuthJwksEndpoint" placeholder="https://example.com/.well-known/jwks.json"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Issuer</label>
+                            <input type="text" @bind="_endpointAuthIssuer" placeholder="https://example.com"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">User ID Claim</label>
+                            <input type="text" @bind="_endpointAuthUserIdClaim" placeholder="sub"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">User Name Claim</label>
+                            <input type="text" @bind="_endpointAuthUserNameClaim" placeholder="Optional"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                    }
                 </div>
 
                 @if (_dialogErrorMessages.Count > 0)
@@ -606,6 +665,14 @@ else
     private EndpointDto? _editingEndpoint;
     private string _endpointName = "";
     private string _endpointTags = "";
+    private int _endpointAuthType = -1; // -1 = None
+    private string _endpointAuthUsername = "";
+    private string _endpointAuthPassword = "";
+    private string _endpointAuthApiKey = "";
+    private string _endpointAuthJwksEndpoint = "";
+    private string _endpointAuthIssuer = "";
+    private string _endpointAuthUserIdClaim = "sub";
+    private string _endpointAuthUserNameClaim = "";
 
     // Delete endpoint
     private bool _showDeleteEndpointDialog;
@@ -614,7 +681,8 @@ else
 
     private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName);
     private record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
-    private record EndpointDto(Guid Id, string Name, string? Tags);
+    private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
+    private record EndpointDto(Guid Id, string Name, string? Tags, AuthenticationDto? Authentication);
 
     private bool HasUnsavedChanges =>
         _name != _savedName || _description != _savedDescription || _version != _savedVersion
@@ -853,6 +921,23 @@ else
         _ => "bg-gray-100 text-gray-700"
     };
 
+    // Auth type helpers
+    private static string GetAuthTypeLabel(int type) => type switch
+    {
+        0 => "Basic",
+        1 => "API Key",
+        2 => "JWT",
+        _ => "None"
+    };
+
+    private static string GetAuthTypeStyle(int type) => type switch
+    {
+        0 => "bg-dusk-blue-900 text-dusk-blue-500",
+        1 => "bg-green-100 text-green-700",
+        2 => "bg-purple-100 text-purple-700",
+        _ => "bg-gray-100 text-gray-500"
+    };
+
     // Table config CRUD
     private void OpenCreateTableDialog()
     {
@@ -1037,6 +1122,7 @@ else
         _editingEndpoint = null;
         _endpointName = "";
         _endpointTags = "";
+        ResetAuthFields();
         _dialogErrorMessages = [];
         _showEndpointDialog = true;
     }
@@ -1046,6 +1132,21 @@ else
         _editingEndpoint = endpoint;
         _endpointName = endpoint.Name;
         _endpointTags = endpoint.Tags ?? "";
+        if (endpoint.Authentication is not null)
+        {
+            _endpointAuthType = endpoint.Authentication.Type;
+            _endpointAuthUsername = endpoint.Authentication.Username ?? "";
+            _endpointAuthPassword = endpoint.Authentication.Password ?? "";
+            _endpointAuthApiKey = endpoint.Authentication.ApiKey ?? "";
+            _endpointAuthJwksEndpoint = endpoint.Authentication.JwksEndpoint ?? "";
+            _endpointAuthIssuer = endpoint.Authentication.Issuer ?? "";
+            _endpointAuthUserIdClaim = endpoint.Authentication.UserIdClaim ?? "sub";
+            _endpointAuthUserNameClaim = endpoint.Authentication.UserNameClaim ?? "";
+        }
+        else
+        {
+            ResetAuthFields();
+        }
         _dialogErrorMessages = [];
         _showEndpointDialog = true;
     }
@@ -1057,6 +1158,18 @@ else
         _dialogErrorMessages = [];
     }
 
+    private void ResetAuthFields()
+    {
+        _endpointAuthType = -1;
+        _endpointAuthUsername = "";
+        _endpointAuthPassword = "";
+        _endpointAuthApiKey = "";
+        _endpointAuthJwksEndpoint = "";
+        _endpointAuthIssuer = "";
+        _endpointAuthUserIdClaim = "sub";
+        _endpointAuthUserNameClaim = "";
+    }
+
     private async Task SaveEndpoint()
     {
         _isDialogSaving = true;
@@ -1064,10 +1177,22 @@ else
 
         try
         {
+            var auth = _endpointAuthType >= 0 ? new AuthenticationDto(
+                _endpointAuthType,
+                _endpointAuthType == 0 ? _endpointAuthUsername.Trim() : null,
+                _endpointAuthType == 0 ? _endpointAuthPassword.Trim() : null,
+                _endpointAuthType == 1 ? _endpointAuthApiKey.Trim() : null,
+                _endpointAuthType == 2 ? _endpointAuthJwksEndpoint.Trim() : null,
+                _endpointAuthType == 2 ? _endpointAuthIssuer.Trim() : null,
+                _endpointAuthType == 2 ? (string.IsNullOrWhiteSpace(_endpointAuthUserIdClaim) ? "sub" : _endpointAuthUserIdClaim.Trim()) : null,
+                _endpointAuthType == 2 ? (string.IsNullOrWhiteSpace(_endpointAuthUserNameClaim) ? null : _endpointAuthUserNameClaim.Trim()) : null
+            ) : (AuthenticationDto?)null;
+
             var request = new
             {
                 Name = _endpointName.Trim(),
-                Tags = string.IsNullOrWhiteSpace(_endpointTags) ? (string?)null : _endpointTags.Trim()
+                Tags = string.IsNullOrWhiteSpace(_endpointTags) ? (string?)null : _endpointTags.Trim(),
+                Authentication = auth
             };
 
             HttpResponseMessage response;
