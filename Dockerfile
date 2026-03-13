@@ -24,6 +24,9 @@ COPY CoreSync/src/CoreSync.PostgreSQL/CoreSync.PostgreSQL.csproj CoreSync/src/Co
 COPY CoreSync/src/CoreSync.Sqlite/CoreSync.Sqlite.csproj CoreSync/src/CoreSync.Sqlite/
 COPY CoreSync/src/CoreSync.SqlServer/CoreSync.SqlServer.csproj CoreSync/src/CoreSync.SqlServer/
 COPY CoreSync/src/CoreSync.SqlServerCT/CoreSync.SqlServerCT.csproj CoreSync/src/CoreSync.SqlServerCT/
+COPY CoreSync/src/CoreSync.Http/CoreSync.Http.csproj CoreSync/src/CoreSync.Http/
+COPY CoreSync/src/CoreSync.Http.Client/CoreSync.Http.Client.csproj CoreSync/src/CoreSync.Http.Client/
+COPY CoreSync/src/CoreSync.Http.Server/CoreSync.Http.Server.csproj CoreSync/src/CoreSync.Http.Server/
 
 # Install npm dependencies for Linux (ignore any Windows lock file)
 WORKDIR /src/src/Server
