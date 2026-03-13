@@ -4,8 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreSyncServer.Data
 {
-    public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
+    public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+        /// <summary>
+        /// Constructor for derived contexts (e.g. multi-tenant SaaS layer).
+        /// </summary>
+        protected ApplicationDbContext(DbContextOptions options) : base(options) { }
+
         private const string AdminUserId = "00000000-0000-0000-0000-000000000001";
         private const string AdminRoleId = "00000000-0000-0000-0000-000000000001";
 
@@ -130,6 +137,13 @@ namespace CoreSyncServer.Data
                 UserId = AdminUserId,
                 RoleId = AdminRoleId
             });
+
+            ConfigureAdditionalModel(builder);
         }
+
+        /// <summary>
+        /// Override in derived contexts to add additional model configuration (e.g. tenant query filters).
+        /// </summary>
+        protected virtual void ConfigureAdditionalModel(ModelBuilder builder) { }
     }
 }

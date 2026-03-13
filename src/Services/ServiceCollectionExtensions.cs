@@ -3,6 +3,7 @@ using CoreSyncServer.Services.Implementation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CoreSyncServer.Services
 {
@@ -15,8 +16,18 @@ namespace CoreSyncServer.Services
         public static IServiceCollection AddCoreSyncData(
             this IServiceCollection services,
             Action<DbContextOptionsBuilder> configureDbContext)
+            => AddCoreSyncData<ApplicationDbContext>(services, configureDbContext);
+
+        /// <summary>
+        /// Registers a derived DbContext (e.g. a multi-tenant CloudDbContext) as the
+        /// ApplicationDbContext implementation, along with Identity and core services.
+        /// </summary>
+        public static IServiceCollection AddCoreSyncData<TContext>(
+            this IServiceCollection services,
+            Action<DbContextOptionsBuilder> configureDbContext)
+            where TContext : ApplicationDbContext
         {
-            services.AddDbContext<ApplicationDbContext>(configureDbContext);
+            services.AddDbContext<ApplicationDbContext, TContext>(configureDbContext);
 
             services.AddIdentityCore<ApplicationUser>(options =>
                 {
@@ -26,6 +37,9 @@ namespace CoreSyncServer.Services
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddSignInManager()
                 .AddDefaultTokenProviders();
+
+            // Default tenant provider (no-op for single-tenant). SaaS layers override with TryAddScoped.
+            services.TryAddScoped<ITenantProvider, NullTenantProvider>();
 
             services.AddSingleton<ISyncProviderFactory, SyncProviderFactory>();
             services.AddSingleton<ISchemaReader, SqliteSchemaReader>();
