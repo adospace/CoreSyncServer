@@ -713,7 +713,7 @@ else
 
     private async Task LoadConfiguration()
     {
-        _config = await Http.GetFromJsonAsync<ConfigurationDetailDto>($"api/datastoreconfiguration/{ConfigId}");
+        _config = await Http.GetFromJsonAsync<ConfigurationDetailDto>($"api/datastoreconfigurations/{ConfigId}");
         if (_config is not null)
         {
             _name = _savedName = _config.Name;
@@ -724,12 +724,12 @@ else
 
     private async Task LoadTableConfigs()
     {
-        _tableConfigs = await Http.GetFromJsonAsync<List<TableConfigDto>>($"api/datastoreconfiguration/{ConfigId}/tables");
+        _tableConfigs = await Http.GetFromJsonAsync<List<TableConfigDto>>($"api/datastoreconfigurations/{ConfigId}/tables");
     }
 
     private async Task LoadEndpoints()
     {
-        _endpoints = await Http.GetFromJsonAsync<List<EndpointDto>>($"api/datastoreconfiguration/{ConfigId}/endpoints");
+        _endpoints = await Http.GetFromJsonAsync<List<EndpointDto>>($"api/datastoreconfigurations/{ConfigId}/endpoints");
     }
 
     // Unsaved changes
@@ -772,7 +772,7 @@ else
                 Version = _version
             };
 
-            var response = await Http.PutAsJsonAsync($"api/datastoreconfiguration/{ConfigId}", request);
+            var response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}", request);
 
             if (response.IsSuccessStatusCode)
             {
@@ -795,7 +795,7 @@ else
 
                 foreach (var tableId in _pendingTableDeletions)
                 {
-                    var deleteResponse = await Http.DeleteAsync($"api/datastoreconfiguration/{ConfigId}/tables/{tableId}");
+                    var deleteResponse = await Http.DeleteAsync($"api/datastoreconfigurations/{ConfigId}/tables/{tableId}");
                     if (!deleteResponse.IsSuccessStatusCode)
                     {
                         var errors = await deleteResponse.Content.ReadFromJsonAsync<List<string>>();
@@ -838,7 +838,7 @@ else
 
         try
         {
-            var response = await Http.DeleteAsync($"api/datastoreconfiguration/{ConfigId}");
+            var response = await Http.DeleteAsync($"api/datastoreconfigurations/{ConfigId}");
 
             if (response.IsSuccessStatusCode)
             {
@@ -984,11 +984,11 @@ else
 
             if (_editingTable is null)
             {
-                response = await Http.PostAsJsonAsync($"api/datastoreconfiguration/{ConfigId}/tables", request);
+                response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables", request);
             }
             else
             {
-                response = await Http.PutAsJsonAsync($"api/datastoreconfiguration/{ConfigId}/tables/{_editingTable.Id}", request);
+                response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables/{_editingTable.Id}", request);
             }
 
             if (response.IsSuccessStatusCode)
@@ -1027,7 +1027,7 @@ else
 
         try
         {
-            var response = await Http.DeleteAsync($"api/datastoreconfiguration/{ConfigId}/tables/{_deletingTable!.Id}");
+            var response = await Http.DeleteAsync($"api/datastoreconfigurations/{ConfigId}/tables/{_deletingTable!.Id}");
 
             if (response.IsSuccessStatusCode)
             {
@@ -1061,7 +1061,7 @@ else
 
         try
         {
-            var response = await Http.PostAsync($"api/datastoreconfiguration/{ConfigId}/tables/scaffold", null);
+            var response = await Http.PostAsync($"api/datastoreconfigurations/{ConfigId}/tables/scaffold", null);
 
             if (response.IsSuccessStatusCode)
             {
@@ -1092,7 +1092,7 @@ else
 
         try
         {
-            var response = await Http.PostAsync($"api/datastoreconfiguration/{ConfigId}/tables/sort", null);
+            var response = await Http.PostAsync($"api/datastoreconfigurations/{ConfigId}/tables/sort", null);
 
             if (response.IsSuccessStatusCode)
             {
@@ -1199,11 +1199,11 @@ else
 
             if (_editingEndpoint is null)
             {
-                response = await Http.PostAsJsonAsync($"api/datastoreconfiguration/{ConfigId}/endpoints", request);
+                response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/endpoints", request);
             }
             else
             {
-                response = await Http.PutAsJsonAsync($"api/datastoreconfiguration/{ConfigId}/endpoints/{_editingEndpoint.Id}", request);
+                response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/endpoints/{_editingEndpoint.Id}", request);
             }
 
             if (response.IsSuccessStatusCode)
@@ -1242,7 +1242,7 @@ else
 
         try
         {
-            var response = await Http.DeleteAsync($"api/datastoreconfiguration/{ConfigId}/endpoints/{_deletingEndpoint!.Id}");
+            var response = await Http.DeleteAsync($"api/datastoreconfigurations/{ConfigId}/endpoints/{_deletingEndpoint!.Id}");
 
             if (response.IsSuccessStatusCode)
             {

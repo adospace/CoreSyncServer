@@ -21,10 +21,12 @@
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.2" />
 		<PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.2" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+		<PackageReference Include="MessagePack" Version="2.5.187" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.Http\CoreSync.Http.csproj" />
 		<ProjectReference Include="..\Services\CoreSyncServer.Services.csproj" />
 		<ProjectReference Include="..\WebClient\CoreSyncServer.Client.csproj" />
 	</ItemGroup>

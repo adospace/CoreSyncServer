@@ -1,10 +1,15 @@
 <Solution>
   <Folder Name="/CoreSync/">
+    <Project Path="../CoreSync/src/CoreSync.Http.Client/CoreSync.Http.Client.csproj" />
+    <Project Path="../CoreSync/src/CoreSync.Http/CoreSync.Http.csproj" />
     <Project Path="../CoreSync/src/CoreSync.PostgreSQL/CoreSync.PostgreSQL.csproj" />
     <Project Path="../CoreSync/src/CoreSync.Sqlite/CoreSync.Sqlite.csproj" />
     <Project Path="../CoreSync/src/CoreSync.SqlServer/CoreSync.SqlServer.csproj" />
     <Project Path="../CoreSync/src/CoreSync.SqlServerCT/CoreSync.SqlServerCT.csproj" />
     <Project Path="../CoreSync/src/CoreSync/CoreSync.csproj" />
+  </Folder>
+  <Folder Name="/demo/">
+    <Project Path="../demo/ConsoleApp/ConsoleApp.csproj" Id="a872b648-5428-403d-87a8-3bd40068a747" />
   </Folder>
   <Project Path="../tests/CoreSyncServer.Tests/CoreSyncServer.Tests.csproj" />
   <Project Path="CoreSyncServer.Data/CoreSyncServer.Data.csproj" Id="0b0e738f-b85f-4476-9600-6da8d2e9ca15" />

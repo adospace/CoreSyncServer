@@ -14,10 +14,13 @@
 		<PackageReference Include="Testcontainers.PostgreSql" Version="4.5.0" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
 		<PackageReference Include="xunit" Version="2.9.3" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.Http.Client\CoreSync.Http.Client.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.Sqlite\CoreSync.Sqlite.csproj" />
 		<ProjectReference Include="..\..\src\Server\CoreSyncServer.csproj" />
 	</ItemGroup>
 

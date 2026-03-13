@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreSyncServer.Controllers;
 
 [ApiController]
-[Route("api/datastoreconfiguration")]
+[Route("api/[controller]")]
 [Authorize]
 public class DataStoreConfigurationsController(
     ApplicationDbContext context,

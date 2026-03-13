@@ -213,7 +213,7 @@
 
     private async Task LoadConfigurations()
     {
-        _configurations = await Http.GetFromJsonAsync<List<ConfigurationListDto>>($"api/datastoreconfiguration?dataStoreId={DataStoreId}");
+        _configurations = await Http.GetFromJsonAsync<List<ConfigurationListDto>>($"api/datastoreconfigurations?dataStoreId={DataStoreId}");
 
         // Load data store name
         var dataStores = await Http.GetFromJsonAsync<List<DataStoreInfo>>($"api/datastores?projectId=");
@@ -246,7 +246,7 @@
         try
         {
             var request = new { Name = _createName.Trim(), DataStoreId };
-            var response = await Http.PostAsJsonAsync("api/datastoreconfiguration", request);
+            var response = await Http.PostAsJsonAsync("api/datastoreconfigurations", request);
 
             if (response.IsSuccessStatusCode)
             {
@@ -292,7 +292,7 @@
 
         try
         {
-            var response = await Http.DeleteAsync($"api/datastoreconfiguration/{_selectedConfig!.Id}");
+            var response = await Http.DeleteAsync($"api/datastoreconfigurations/{_selectedConfig!.Id}");
 
             if (response.IsSuccessStatusCode)
             {

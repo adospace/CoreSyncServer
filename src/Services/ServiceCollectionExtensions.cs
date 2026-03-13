@@ -27,6 +27,7 @@ namespace CoreSyncServer.Services
                 .AddSignInManager()
                 .AddDefaultTokenProviders();
 
+            services.AddSingleton<ISyncProviderFactory, SyncProviderFactory>();
             services.AddSingleton<ISchemaReader, SqliteSchemaReader>();
             services.AddSingleton<ISchemaReader, SqlServerSchemaReader>();
             services.AddSingleton<ISchemaReader, PostgreSqlSchemaReader>();
