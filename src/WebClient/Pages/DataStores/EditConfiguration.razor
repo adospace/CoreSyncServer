@@ -1,7 +1,8 @@
 @page "/data-stores/configurations/edit/{ConfigId:int}"
 @attribute [Authorize]
 @inherits InteractivePage
-@implements IDisposable
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 @inject NavigationManager NavigationManager
 @layout DashboardLayout
 @rendermode InteractiveWebAssembly
@@ -23,11 +24,11 @@ else
     <div class="space-y-6">
         @* Header *@
         <div>
-            <a href="/data-stores/@_config.DataStoreId/configurations"
-               class="text-sm text-dusk-blue-500 hover:text-dusk-blue-600 hover:underline flex items-center gap-1 mb-2">
+            <button @onclick="NavigateBack"
+                    class="text-sm text-dusk-blue-500 hover:text-dusk-blue-600 hover:underline flex items-center gap-1 mb-2">
                 <span class="i-lucide-arrow-left size-3.5"></span>
-                Back to Configurations
-            </a>
+                Back to Data Store
+            </button>
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Edit Configuration</h1>
@@ -618,10 +619,10 @@ else
     private List<string> _errorMessages = [];
 
     // Unsaved changes
-    private IDisposable? _locationChangingRegistration;
+    private IJSObjectReference? _jsModule;
+    private DotNetObjectReference<EditConfiguration>? _dotNetRef;
     private bool _showUnsavedDialog;
     private string? _pendingUri;
-    private bool _forceNavigate;
 
     // Delete config
     private bool _showDeleteConfigDialog;
@@ -705,7 +706,9 @@ else
 
     protected override async Task OnInitializedInteractiveAsync()
     {
-        _locationChangingRegistration = NavigationManager.RegisterLocationChangingHandler(OnLocationChanging);
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/unsavedChangesGuard.js");
+        await _jsModule.InvokeVoidAsync("register", _dotNetRef);
         await LoadConfiguration();
         await LoadTableConfigs();
         await LoadEndpoints();
@@ -733,28 +736,48 @@ else
     }
 
     // Unsaved changes
-    private ValueTask OnLocationChanging(LocationChangingContext context)
+    private void NavigateBack()
     {
-        if (HasUnsavedChanges && !_forceNavigate)
+        if (HasUnsavedChanges)
         {
-            context.PreventNavigation();
-            _pendingUri = context.TargetLocation;
+            _pendingUri = $"/data-stores/{_config!.DataStoreId}/edit";
+            _showUnsavedDialog = true;
+        }
+        else
+        {
+            NavigationManager.NavigateTo($"/data-stores/{_config!.DataStoreId}/edit");
+        }
+    }
+
+    [JSInvokable]
+    public void OnNavigationAttempted(string href)
+    {
+        if (HasUnsavedChanges)
+        {
+            _pendingUri = href;
             _showUnsavedDialog = true;
             StateHasChanged();
         }
-        return ValueTask.CompletedTask;
+        else
+        {
+            NavigationManager.NavigateTo(href);
+        }
     }
 
     private void DiscardAndNavigate()
     {
         _showUnsavedDialog = false;
-        _forceNavigate = true;
         NavigationManager.NavigateTo(_pendingUri!);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _locationChangingRegistration?.Dispose();
+        if (_jsModule is not null)
+        {
+            await _jsModule.InvokeVoidAsync("unregister");
+            await _jsModule.DisposeAsync();
+        }
+        _dotNetRef?.Dispose();
     }
 
     // Save configuration
@@ -843,8 +866,7 @@ else
             if (response.IsSuccessStatusCode)
             {
                 _showDeleteConfigDialog = false;
-                _forceNavigate = true;
-                NavigationManager.NavigateTo($"/data-stores/{_config!.DataStoreId}/configurations");
+                NavigationManager.NavigateTo($"/data-stores/{_config!.DataStoreId}/edit");
             }
             else
             {

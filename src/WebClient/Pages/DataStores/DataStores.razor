@@ -44,7 +44,7 @@
               OnRefresh="@LoadDataStores">
         <QuickGrid Items="@_filteredDataStores" Pagination="@_pagination" Theme="custom">
             <TemplateColumn Title="Name" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Name))">
-                <a href="@($"/data-stores/{context.Id}/configurations")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>
+                <a href="@($"/data-stores/{context.Id}/edit")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>
             </TemplateColumn>
             <TemplateColumn Title="Type" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.Type))">
                 <div class="flex items-center gap-2">
@@ -61,7 +61,7 @@
                 </TemplateColumn>
             }
             <TemplateColumn Title="Configurations" SortBy="@(GridSort<DataStoreDto>.ByAscending(d => d.ConfigurationsCount))">
-                <a href="/data-stores/@context.Id/configurations" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 hover:bg-dusk-blue-900 hover:text-dusk-blue-500 transition-colors">
+                <a href="/data-stores/@context.Id/edit" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 hover:bg-dusk-blue-900 hover:text-dusk-blue-500 transition-colors">
                     @context.ConfigurationsCount
                 </a>
             </TemplateColumn>
@@ -72,16 +72,11 @@
             </TemplateColumn>
             <TemplateColumn Title="Actions" Align="Align.End">
                 <div class="flex items-center justify-end gap-1">
-                    <a href="/data-stores/@context.Id/configurations"
+                    <a href="/data-stores/@context.Id/edit"
                        class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
-                       title="Configurations">
-                        <span class="i-lucide-layers size-4"></span>
-                    </a>
-                    <button @onclick="() => OpenEditDialog(context)"
-                            class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
-                            title="Edit data store">
+                       title="Edit data store">
                         <span class="i-lucide-pencil size-4"></span>
-                    </button>
+                    </a>
                     <button @onclick="() => OpenDeleteDialog(context)"
                             class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
                             title="Delete data store">
@@ -187,57 +182,6 @@
     </div>
 }
 
-@* Edit dialog *@
-@if (_showEditDialog)
-{
-    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseEditDialog"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
-            <div class="p-6">
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
-                        <span class="i-lucide-pencil size-5 text-dusk-blue-500"></span>
-                    </div>
-                    <h2 class="text-lg font-semibold text-gray-900">Edit Data Store</h2>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                        <input type="text" @bind="_editName" placeholder="Enter data store name"
-                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea @bind="_editDescription" rows="3" placeholder="Optional description for this data store"
-                                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors resize-none"></textarea>
-                    </div>
-                </div>
-
-                @if (_errorMessages.Count > 0)
-                {
-                    <div class="mt-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
-                        @foreach (var error in _errorMessages)
-                        {
-                            <p class="text-sm text-ink-black-500">@error</p>
-                        }
-                    </div>
-                }
-
-                <div class="flex justify-end gap-3 mt-6">
-                    <button @onclick="CloseEditDialog"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button @onclick="SaveEditDataStore" disabled="@(!IsEditFormValid() || _isSaving)"
-                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
-                        @(_isSaving ? "Saving..." : "Save")
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
 
 @* Delete dialog *@
 @if (_showDeleteDialog)
@@ -304,12 +248,6 @@
     private DataStoreType _formType = DataStoreType.SQLite;
     private int _formProjectId;
 
-    // Edit dialog
-    private bool _showEditDialog;
-    private DataStoreDto? _editDataStore;
-    private string _editName = "";
-    private string _editDescription = "";
-
     // Delete dialog
     private bool _showDeleteDialog;
     private DataStoreDto? _selectedDataStore;
@@ -375,61 +313,6 @@
         DataStoreType.PostgreSQL => "PostgreSQL",
         _ => "Unknown"
     };
-
-    // Edit dialog
-    private void OpenEditDialog(DataStoreDto dataStore)
-    {
-        _editDataStore = dataStore;
-        _editName = dataStore.Name;
-        _editDescription = dataStore.Description ?? "";
-        _errorMessages = [];
-        _showEditDialog = true;
-    }
-
-    private void CloseEditDialog()
-    {
-        _showEditDialog = false;
-        _editDataStore = null;
-        _errorMessages = [];
-    }
-
-    private bool IsEditFormValid() => !string.IsNullOrWhiteSpace(_editName);
-
-    private async Task SaveEditDataStore()
-    {
-        _isSaving = true;
-        _errorMessages = [];
-
-        try
-        {
-            var request = new
-            {
-                Name = _editName.Trim(),
-                Description = string.IsNullOrWhiteSpace(_editDescription) ? (string?)null : _editDescription.Trim()
-            };
-
-            var response = await Http.PutAsJsonAsync($"api/datastores/{_editDataStore!.Id}", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                CloseEditDialog();
-                await LoadDataStores();
-            }
-            else
-            {
-                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
-                _errorMessages = errors ?? ["An unexpected error occurred."];
-            }
-        }
-        catch (Exception ex)
-        {
-            _errorMessages = [ex.Message];
-        }
-        finally
-        {
-            _isSaving = false;
-        }
-    }
 
     // Create dialog
     private void OpenCreateDialog()

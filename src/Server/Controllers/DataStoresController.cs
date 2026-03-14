@@ -114,7 +114,47 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
             dataStore.IsMonitorEnabled));
     }
 
-    public record UpdateDataStoreRequest(string Name, string? Description);
+    public record DataStoreDetailDto(
+        int Id,
+        string Name,
+        string? Description,
+        DataStoreType Type,
+        string ProjectName,
+        int ProjectId,
+        bool IsMonitorEnabled,
+        string? FilePath,
+        string? ConnectionString,
+        SqlServerDataStoreTrackingMode? TrackingMode);
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<DataStoreDetailDto>> GetById(int id)
+    {
+        var dataStore = await context.DataStores
+            .Include(d => d.Project)
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+        if (dataStore is null) return NotFound();
+
+        return Ok(new DataStoreDetailDto(
+            dataStore.Id,
+            dataStore.Name,
+            dataStore.Description,
+            dataStore.Type,
+            dataStore.Project!.Name,
+            dataStore.ProjectId,
+            dataStore.IsMonitorEnabled,
+            (dataStore as SqliteDataStore)?.FilePath,
+            (dataStore as SqlServerDataStore)?.ConnectionString
+                ?? (dataStore as PostgreSqlDataStore)?.ConnectionString,
+            (dataStore as SqlServerDataStore)?.TrackingMode));
+    }
+
+    public record UpdateDataStoreRequest(
+        string Name,
+        string? Description,
+        string? FilePath,
+        string? ConnectionString,
+        SqlServerDataStoreTrackingMode? TrackingMode);
 
     [HttpPut("{id}")]
     public async Task<ActionResult> Update(int id, [FromBody] UpdateDataStoreRequest request)
@@ -127,6 +167,25 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
 
         dataStore.Name = request.Name.Trim();
         dataStore.Description = request.Description?.Trim();
+
+        switch (dataStore)
+        {
+            case SqliteDataStore sqlite:
+                if (request.FilePath is not null)
+                    sqlite.FilePath = request.FilePath.Trim();
+                break;
+            case SqlServerDataStore sqlServer:
+                if (request.ConnectionString is not null)
+                    sqlServer.ConnectionString = request.ConnectionString.Trim();
+                if (request.TrackingMode.HasValue)
+                    sqlServer.TrackingMode = request.TrackingMode.Value;
+                break;
+            case PostgreSqlDataStore postgres:
+                if (request.ConnectionString is not null)
+                    postgres.ConnectionString = request.ConnectionString.Trim();
+                break;
+        }
+
         await context.SaveChangesAsync();
 
         return NoContent();
