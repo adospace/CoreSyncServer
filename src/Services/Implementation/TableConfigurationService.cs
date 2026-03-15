@@ -12,7 +12,7 @@ public class TableConfigurationService(
     ITableSorter tableSorter,
     IDiagnosticService diagnosticService) : ITableConfigurationService
 {
-    private const string ChangeTrackingTablePrefix = "__CORESYNC";
+    private const string ChangeTrackingTablePrefix = "__CORE_SYNC_";
 
     public async Task<TableConfigurationResult> ScaffoldAsync(int configurationId, CancellationToken cancellationToken = default)
     {
