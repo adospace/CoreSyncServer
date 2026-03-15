@@ -103,7 +103,7 @@ else
                             {
                                 <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                     <span class="i-lucide-lock size-3.5"></span>
-                                    @(IsPublished ? "Locked (published endpoint)" : "Locked (has endpoints)")
+                                    Locked (published endpoint)
                                 </span>
                             }
                             else
@@ -604,8 +604,7 @@ else
 
     private bool IsSqlServer => _config?.DataStoreType == 1;
     private bool IsPublished => _config?.HasPublishedEndpoint == true;
-    private bool HasEndpoints => _config?.HasEndpoints == true;
-    private bool IsTableConfigLocked => IsPublished || HasEndpoints;
+    private bool IsTableConfigLocked => IsPublished;
 
     private bool HasUnsavedChanges =>
         _name != _savedName || _description != _savedDescription || _version != _savedVersion

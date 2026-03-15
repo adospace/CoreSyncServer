@@ -5,11 +5,14 @@ using CoreSync.Sqlite;
 using CoreSync.SqlServer;
 using CoreSync.SqlServerCT;
 using CoreSyncServer.Data;
+using Microsoft.Extensions.Logging;
 
 namespace CoreSyncServer.Services.Implementation;
 
-internal class SyncProviderFactory : ISyncProviderFactory
+internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncProviderFactory
 {
+    private readonly ISyncLogger _syncLogger = new SyncLoggerAdapter(logger);
+
     public ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration)
     {
         var dataStore = configuration.DataStore
@@ -31,7 +34,7 @@ internal class SyncProviderFactory : ISyncProviderFactory
         };
     }
 
-    private static ISyncProvider CreateSqliteProvider(SqliteDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqliteProvider(SqliteDataStore dataStore, List<DataStoreTableConfiguration> tables)
     {
         var builder = new SqliteSyncConfigurationBuilder($"Data Source={dataStore.FilePath}");
 
@@ -44,10 +47,10 @@ internal class SyncProviderFactory : ISyncProviderFactory
                 customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
-        return new SqliteSyncProvider(builder.Build(), ProviderMode.Remote);
+        return new SqliteSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
     }
 
-    private static ISyncProvider CreateSqlServerCTProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqlServerCTProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
     {
         var builder = new SqlServerCTSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -72,10 +75,10 @@ internal class SyncProviderFactory : ISyncProviderFactory
                 builder.IdentityInsert((CoreSync.SqlServerCT.IdentityInsertMode)(int)table.IdentityInsert);
         }
 
-        return new SqlServerCTProvider(builder.Build(), ProviderMode.Remote);
+        return new SqlServerCTProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
     }
 
-    private static ISyncProvider CreateSqlServerProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqlServerProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
     {
         var builder = new SqlSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -103,10 +106,10 @@ internal class SyncProviderFactory : ISyncProviderFactory
                 builder.ForceReloadInsertedRecords();
         }
 
-        return new SqlSyncProvider(builder.Build(), ProviderMode.Remote);
+        return new SqlSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
     }
 
-    private static ISyncProvider CreatePostgresProvider(PostgreSqlDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreatePostgresProvider(PostgreSqlDataStore dataStore, List<DataStoreTableConfiguration> tables)
     {
         var builder = new PostgreSQLSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -119,7 +122,7 @@ internal class SyncProviderFactory : ISyncProviderFactory
                 customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
-        return new PostgreSQLSyncProvider(builder.Build(), ProviderMode.Remote);
+        return new PostgreSQLSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
     }
 
     private static string[] DeserializeStringArray(string? json)
