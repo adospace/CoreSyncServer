@@ -220,26 +220,46 @@ public class TableConfigurationService(
         schemaTables = FilterChangeTrackingTables(schemaTables);
         var sortResult = tableSorter.Sort(schemaTables);
 
-        var sortLookup = new Dictionary<(string?, string), int>(
+        // Build a rank lookup from the full topological sort
+        var rankLookup = new Dictionary<(string?, string), int>(
             sortResult.SortedTables.Select((t, i) => KeyValuePair.Create(
-                (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()), i + 1)));
+                (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()), i)));
 
+        // Separate configured tables into found (sortable) and missing
+        var found = new List<DataStoreTableConfiguration>();
+        var missing = new List<DataStoreTableConfiguration>();
         var pendingDiagnostics = new List<DiagnosticItem>();
-        var maxSort = sortLookup.Count;
+
         foreach (var table in config.TableConfigurations)
         {
             var key = (table.Schema?.ToLowerInvariant(), table.Name.ToLowerInvariant());
-            if (sortLookup.TryGetValue(key, out var order))
+            if (rankLookup.ContainsKey(key))
             {
-                table.Sort = order;
+                found.Add(table);
             }
             else
             {
-                table.Sort = ++maxSort;
+                missing.Add(table);
                 table.Message = "Table not found in database schema";
                 pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
             }
         }
+
+        // Sort found tables by their topological rank, then assign contiguous Sort values
+        found.Sort((a, b) =>
+        {
+            var keyA = (a.Schema?.ToLowerInvariant(), a.Name.ToLowerInvariant());
+            var keyB = (b.Schema?.ToLowerInvariant(), b.Name.ToLowerInvariant());
+            return rankLookup[keyA].CompareTo(rankLookup[keyB]);
+        });
+
+        var sortOrder = 0;
+        foreach (var table in found)
+            table.Sort = ++sortOrder;
+
+        // Append missing tables after found ones
+        foreach (var table in missing)
+            table.Sort = ++sortOrder;
 
         await context.SaveChangesAsync(cancellationToken);
 

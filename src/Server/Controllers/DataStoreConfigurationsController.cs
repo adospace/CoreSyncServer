@@ -30,7 +30,9 @@ public class DataStoreConfigurationsController(
         int Version,
         int DataStoreId,
         string DataStoreName,
-        int DataStoreType);
+        int DataStoreType,
+        bool HasPublishedEndpoint,
+        bool HasEndpoints);
 
     public record TableConfigDto(
         int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message,
@@ -38,7 +40,7 @@ public class DataStoreConfigurationsController(
         string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
         bool ForceReloadInsertedRecords);
     public record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
-    public record EndpointDto(Guid Id, string Name, string? Tags, AuthenticationDto? Authentication);
+    public record EndpointDto(Guid Id, string Name, string? Tags, bool IsPublished, AuthenticationDto? Authentication);
 
     [HttpGet]
     public async Task<ActionResult<List<ConfigurationListDto>>> GetAll([FromQuery] int dataStoreId)
@@ -64,6 +66,7 @@ public class DataStoreConfigurationsController(
     {
         var config = await context.DataStoreConfigurations
             .Include(c => c.DataStore)
+            .Include(c => c.Endpoints)
             .FirstOrDefaultAsync(c => c.Id == id);
 
         if (config is null) return NotFound();
@@ -75,7 +78,9 @@ public class DataStoreConfigurationsController(
             config.Version,
             config.DataStoreId,
             config.DataStore!.Name,
-            (int)config.DataStore.Type));
+            (int)config.DataStore.Type,
+            config.Endpoints.Any(e => e.IsPublished),
+            config.Endpoints.Count > 0));
     }
 
     public record CreateConfigurationRequest(string Name, int DataStoreId);
@@ -111,8 +116,13 @@ public class DataStoreConfigurationsController(
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new[] { "Name is required." });
 
-        var config = await context.DataStoreConfigurations.FindAsync(id);
+        var config = await context.DataStoreConfigurations
+            .Include(c => c.Endpoints)
+            .FirstOrDefaultAsync(c => c.Id == id);
         if (config is null) return NotFound();
+
+        if (config.Endpoints.Any(e => e.IsPublished) && config.Version != request.Version)
+            return BadRequest(new[] { "Cannot change version while an endpoint is published." });
 
         config.Name = request.Name.Trim();
         config.Description = request.Description?.Trim();
@@ -170,6 +180,9 @@ public class DataStoreConfigurationsController(
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new[] { "Name is required." });
 
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
         var config = await context.DataStoreConfigurations.FindAsync(id);
         if (config is null) return NotFound();
 
@@ -209,6 +222,9 @@ public class DataStoreConfigurationsController(
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new[] { "Name is required." });
 
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
         var table = await context.DataStoreTableConfigurations
             .FirstOrDefaultAsync(t => t.Id == tableId && t.DataStoreConfigurationId == id);
 
@@ -232,6 +248,9 @@ public class DataStoreConfigurationsController(
     [HttpDelete("{id}/tables/{tableId}")]
     public async Task<ActionResult> DeleteTable(int id, int tableId)
     {
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
         var table = await context.DataStoreTableConfigurations
             .FirstOrDefaultAsync(t => t.Id == tableId && t.DataStoreConfigurationId == id);
 
@@ -248,6 +267,9 @@ public class DataStoreConfigurationsController(
     [HttpPost("{id}/tables/scaffold")]
     public async Task<ActionResult<List<TableConfigDto>>> ScaffoldTables(int id)
     {
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
         var result = await tableConfigurationService.ScaffoldAsync(id);
         return ToTableResponse(result);
     }
@@ -262,6 +284,9 @@ public class DataStoreConfigurationsController(
     [HttpPost("{id}/tables/sort")]
     public async Task<ActionResult<List<TableConfigDto>>> SortTables(int id)
     {
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
         var result = await tableConfigurationService.SortAsync(id);
         return ToTableResponse(result);
     }
@@ -405,7 +430,7 @@ public class DataStoreConfigurationsController(
     }
 
     private static EndpointDto MapEndpoint(Data.Endpoint e) =>
-        new(e.Id, e.Name, e.Tags, e.Authentication switch
+        new(e.Id, e.Name, e.Tags, e.IsPublished, e.Authentication switch
         {
             BasicAuthentication b => new AuthenticationDto((int)EndPointAuthenticationType.Basic, b.Username, b.Password, null, null, null, null, null),
             ApiKeyAuthentication a => new AuthenticationDto((int)EndPointAuthenticationType.ApiKey, null, null, a.ApiKey, null, null, null, null),
@@ -450,4 +475,7 @@ public class DataStoreConfigurationsController(
                 break;
         }
     }
+
+    private async Task<bool> HasPublishedEndpoint(int configurationId) =>
+        await context.Endpoints.AnyAsync(e => e.DataStoreConfigurationId == configurationId && e.IsPublished);
 }

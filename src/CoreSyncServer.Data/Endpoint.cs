@@ -12,6 +12,8 @@ public class Endpoint
 
     public string? Tags { get; set; }
 
+    public bool IsPublished { get; set; }
+
     public int? AuthenticationId { get; set; }
 
     public EndPointAuthentication? Authentication { get; set; }

@@ -210,6 +210,7 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
         Guid Id,
         string Name,
         string? Tags,
+        bool IsPublished,
         int DataStoreConfigurationId,
         string ConfigurationName,
         EndpointAuthDto? Authentication);
@@ -228,6 +229,7 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
             e.Id,
             e.Name,
             e.Tags,
+            e.IsPublished,
             e.DataStoreConfigurationId,
             e.DataStoreConfiguration!.Name,
             e.Authentication switch
@@ -240,6 +242,23 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPut("{id}/endpoints/{endpointId}/publish")]
+    public async Task<ActionResult> PublishEndpoint(int id, Guid endpointId, [FromBody] PublishEndpointRequest request)
+    {
+        var endpoint = await context.Endpoints
+            .Include(e => e.DataStoreConfiguration)
+            .FirstOrDefaultAsync(e => e.Id == endpointId && e.DataStoreConfiguration!.DataStoreId == id);
+
+        if (endpoint is null) return NotFound();
+
+        endpoint.IsPublished = request.IsPublished;
+        await context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    public record PublishEndpointRequest(bool IsPublished);
 
     public record UpdateEndpointConfigurationRequest(int DataStoreConfigurationId);
 

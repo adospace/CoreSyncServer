@@ -281,6 +281,16 @@ else
                                 <TemplateColumn Title="Configuration" SortBy="@(GridSort<EndpointListDto>.ByAscending(e => e.ConfigurationName))">
                                     <span class="text-sm text-gray-700">@context.ConfigurationName</span>
                                 </TemplateColumn>
+                                <TemplateColumn Title="Status" SortBy="@(GridSort<EndpointListDto>.ByDescending(e => e.IsPublished))">
+                                    @if (context.IsPublished)
+                                    {
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Published</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Draft</span>
+                                    }
+                                </TemplateColumn>
                                 <TemplateColumn Title="Auth">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetAuthTypeStyle(context.Authentication?.Type ?? -1)">
                                         @GetAuthTypeLabel(context.Authentication?.Type ?? -1)
@@ -288,6 +298,22 @@ else
                                 </TemplateColumn>
                                 <TemplateColumn Title="Actions" Align="Align.End">
                                     <div class="flex items-center justify-end gap-1">
+                                        @if (context.IsPublished)
+                                        {
+                                            <button @onclick="() => ToggleEndpointPublished(context)"
+                                                    class="p-2 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-gray-100 transition-colors"
+                                                    title="Unpublish endpoint">
+                                                <span class="i-lucide-cloud-off size-4"></span>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button @onclick="() => ToggleEndpointPublished(context)"
+                                                    class="p-2 rounded-lg text-green-500 hover:text-green-600 hover:bg-gray-100 transition-colors"
+                                                    title="Publish endpoint">
+                                                <span class="i-lucide-cloud size-4"></span>
+                                            </button>
+                                        }
                                         <button @onclick="() => OpenEditEndpointDialog(context)"
                                                 class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
                                                 title="Edit endpoint">
@@ -755,7 +781,7 @@ else
     private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode);
     private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount, bool InError);
     private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
-    private record EndpointListDto(Guid Id, string Name, string? Tags, int DataStoreConfigurationId, string ConfigurationName, AuthenticationDto? Authentication);
+    private record EndpointListDto(Guid Id, string Name, string? Tags, bool IsPublished, int DataStoreConfigurationId, string ConfigurationName, AuthenticationDto? Authentication);
 
     private bool HasUnsavedChanges =>
         _editName != _savedName
@@ -1010,6 +1036,29 @@ else
         2 => "bg-purple-100 text-purple-700",
         _ => "bg-gray-100 text-gray-500"
     };
+
+    private async Task ToggleEndpointPublished(EndpointListDto endpoint)
+    {
+        _endpointErrorMessages = [];
+        try
+        {
+            var request = new { IsPublished = !endpoint.IsPublished };
+            var response = await Http.PutAsJsonAsync($"api/datastores/{DataStoreId}/endpoints/{endpoint.Id}/publish", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadEndpoints();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _endpointErrorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _endpointErrorMessages = [ex.Message];
+        }
+    }
 
     private void OpenCreateEndpointDialog()
     {

@@ -71,8 +71,12 @@ else
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                    <input type="number" @bind="_version" min="1"
-                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                    <input type="number" @bind="_version" min="1" disabled="@IsPublished"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-500" />
+                    @if (IsPublished)
+                    {
+                        <p class="text-xs text-amber-600 mt-1">Version is locked while an endpoint is published.</p>
+                    }
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
@@ -95,36 +99,46 @@ else
                               FilterTextChanged="@(v => _tableSearchText = v)"
                               OnRefresh="@LoadTableConfigs">
                         <ToolbarContent>
-                            <button @onclick="OpenCreateTableDialog"
-                                    class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
-                                <span class="i-lucide-plus size-3.5"></span>
-                                Add Table
-                            </button>
-                            <button @onclick="ScaffoldTables" disabled="@_isScaffolding"
-                                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
-                                <span class="i-lucide-database size-3.5"></span>
-                                @(_isScaffolding ? "Scaffolding..." : "Scaffold")
-                            </button>
-                            <button @onclick="SortTables" disabled="@_isSorting"
-                                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
-                                <span class="i-lucide-arrow-up-down size-3.5"></span>
-                                @(_isSorting ? "Sorting..." : "Sort")
-                            </button>
-                            @if (_selectedTableIds.Count > 0)
+                            @if (IsTableConfigLocked)
                             {
-                                <div class="h-6 w-px bg-gray-300"></div>
-                                <button @onclick="MarkSelectedTablesForDeletion"
-                                        class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
-                                    <span class="i-lucide-trash-2 size-3.5"></span>
-                                    Delete Selected (@_selectedTableIds.Count)
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                    <span class="i-lucide-lock size-3.5"></span>
+                                    @(IsPublished ? "Locked (published endpoint)" : "Locked (has endpoints)")
+                                </span>
+                            }
+                            else
+                            {
+                                <button @onclick="OpenCreateTableDialog"
+                                        class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
+                                    <span class="i-lucide-plus size-3.5"></span>
+                                    Add Table
                                 </button>
+                                <button @onclick="ScaffoldTables" disabled="@_isScaffolding"
+                                        class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
+                                    <span class="i-lucide-database size-3.5"></span>
+                                    @(_isScaffolding ? "Scaffolding..." : "Scaffold")
+                                </button>
+                                <button @onclick="SortTables" disabled="@_isSorting"
+                                        class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
+                                    <span class="i-lucide-arrow-up-down size-3.5"></span>
+                                    @(_isSorting ? "Sorting..." : "Sort")
+                                </button>
+                                @if (_selectedTableIds.Count > 0)
+                                {
+                                    <div class="h-6 w-px bg-gray-300"></div>
+                                    <button @onclick="MarkSelectedTablesForDeletion"
+                                            class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
+                                        <span class="i-lucide-trash-2 size-3.5"></span>
+                                        Delete Selected (@_selectedTableIds.Count)
+                                    </button>
+                                }
                             }
                         </ToolbarContent>
                         <ChildContent>
                             <QuickGrid Items="@_filteredTableConfigs" Pagination="@_tablePagination" Theme="custom">
-                                <TemplateColumn Class="w-12" Align="Align.Center">
+                                <TemplateColumn Class="@(IsTableConfigLocked ? "hidden" : "w-12")" Align="Align.Center">
                                     <HeaderTemplate>
-                                        @if (_filteredTableConfigs?.Any() == true)
+                                        @if (!IsTableConfigLocked && _filteredTableConfigs?.Any() == true)
                                         {
                                             <input type="checkbox"
                                                    checked="@AllVisibleTablesSelected"
@@ -133,10 +147,13 @@ else
                                         }
                                     </HeaderTemplate>
                                     <ChildContent>
-                                        <input type="checkbox"
-                                               checked="@_selectedTableIds.Contains(context.Id)"
-                                               @onchange="() => ToggleTableSelection(context.Id)"
-                                               class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                        @if (!IsTableConfigLocked)
+                                        {
+                                            <input type="checkbox"
+                                                   checked="@_selectedTableIds.Contains(context.Id)"
+                                                   @onchange="() => ToggleTableSelection(context.Id)"
+                                                   class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500 cursor-pointer" />
+                                        }
                                     </ChildContent>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Sort" SortBy="@(GridSort<TableConfigDto>.ByAscending(t => t.Sort))" IsDefaultSortColumn="true">
@@ -199,18 +216,21 @@ else
                                     }
                                 </TemplateColumn>
                                 <TemplateColumn Title="Actions" Align="Align.End">
-                                    <div class="flex items-center justify-end gap-1">
-                                        <button @onclick="() => OpenEditTableDialog(context)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
-                                                title="Edit table">
-                                            <span class="i-lucide-pencil size-4"></span>
-                                        </button>
-                                        <button @onclick="() => OpenDeleteTableDialog(context)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
-                                                title="Delete table">
-                                            <span class="i-lucide-trash-2 size-4"></span>
-                                        </button>
-                                    </div>
+                                    @if (!IsTableConfigLocked)
+                                    {
+                                        <div class="flex items-center justify-end gap-1">
+                                            <button @onclick="() => OpenEditTableDialog(context)"
+                                                    class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                                                    title="Edit table">
+                                                <span class="i-lucide-pencil size-4"></span>
+                                            </button>
+                                            <button @onclick="() => OpenDeleteTableDialog(context)"
+                                                    class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
+                                                    title="Delete table">
+                                                <span class="i-lucide-trash-2 size-4"></span>
+                                            </button>
+                                        </div>
+                                    }
                                 </TemplateColumn>
                             </QuickGrid>
                         </ChildContent>
@@ -575,7 +595,7 @@ else
     private string _sqlPreviewIncrementalQuery = "";
     private string _sqlPreviewSnapshotQuery = "";
 
-    private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName, int DataStoreType);
+    private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName, int DataStoreType, bool HasPublishedEndpoint, bool HasEndpoints);
     private record TableConfigDto(
         int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message,
         bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
@@ -583,6 +603,9 @@ else
         bool ForceReloadInsertedRecords);
 
     private bool IsSqlServer => _config?.DataStoreType == 1;
+    private bool IsPublished => _config?.HasPublishedEndpoint == true;
+    private bool HasEndpoints => _config?.HasEndpoints == true;
+    private bool IsTableConfigLocked => IsPublished || HasEndpoints;
 
     private bool HasUnsavedChanges =>
         _name != _savedName || _description != _savedDescription || _version != _savedVersion
