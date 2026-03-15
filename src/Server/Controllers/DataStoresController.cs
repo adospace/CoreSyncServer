@@ -202,4 +202,65 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
 
         return NoContent();
     }
+
+    // Endpoints across all configurations for a data store
+
+    public record EndpointAuthDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
+    public record DataStoreEndpointDto(
+        Guid Id,
+        string Name,
+        string? Tags,
+        int DataStoreConfigurationId,
+        string ConfigurationName,
+        EndpointAuthDto? Authentication);
+
+    [HttpGet("{id}/endpoints")]
+    public async Task<ActionResult<List<DataStoreEndpointDto>>> GetEndpoints(int id)
+    {
+        var endpoints = await context.Endpoints
+            .Include(e => e.DataStoreConfiguration)
+            .Include(e => e.Authentication)
+            .Where(e => e.DataStoreConfiguration!.DataStoreId == id)
+            .OrderBy(e => e.Name)
+            .ToListAsync();
+
+        var result = endpoints.Select(e => new DataStoreEndpointDto(
+            e.Id,
+            e.Name,
+            e.Tags,
+            e.DataStoreConfigurationId,
+            e.DataStoreConfiguration!.Name,
+            e.Authentication switch
+            {
+                BasicAuthentication b => new EndpointAuthDto((int)EndPointAuthenticationType.Basic, b.Username, b.Password, null, null, null, null, null),
+                ApiKeyAuthentication a => new EndpointAuthDto((int)EndPointAuthenticationType.ApiKey, null, null, a.ApiKey, null, null, null, null),
+                JwtAuthentication j => new EndpointAuthDto((int)EndPointAuthenticationType.Jwt, null, null, null, j.JWKSEndpoint, j.Issuer, j.UserIdClaim, j.UserNameClaim),
+                _ => null
+            })).ToList();
+
+        return Ok(result);
+    }
+
+    public record UpdateEndpointConfigurationRequest(int DataStoreConfigurationId);
+
+    [HttpPut("{id}/endpoints/{endpointId}/configuration")]
+    public async Task<ActionResult> UpdateEndpointConfiguration(int id, Guid endpointId, [FromBody] UpdateEndpointConfigurationRequest request)
+    {
+        var endpoint = await context.Endpoints
+            .Include(e => e.DataStoreConfiguration)
+            .FirstOrDefaultAsync(e => e.Id == endpointId && e.DataStoreConfiguration!.DataStoreId == id);
+
+        if (endpoint is null) return NotFound();
+
+        var targetConfig = await context.DataStoreConfigurations
+            .FirstOrDefaultAsync(c => c.Id == request.DataStoreConfigurationId && c.DataStoreId == id);
+
+        if (targetConfig is null)
+            return BadRequest(new[] { "Target configuration not found or does not belong to this data store." });
+
+        endpoint.DataStoreConfigurationId = request.DataStoreConfigurationId;
+        await context.SaveChangesAsync();
+
+        return NoContent();
+    }
 }

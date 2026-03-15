@@ -81,31 +81,9 @@ else
             </div>
         </div>
 
-        @* Tabs *@
+        @* Table Configurations *@
         <div>
-            <div class="flex border-b border-gray-200">
-                <button class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors @(_activeTab == Tab.TableConfigs ? "border-dusk-blue-500 text-dusk-blue-500" : "border-transparent text-gray-500 hover:text-gray-700")"
-                        @onclick="() => SwitchTab(Tab.TableConfigs)">
-                    Table Configurations
-                    @if (_tableConfigs is not null)
-                    {
-                        <span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">@_tableConfigs.Count</span>
-                    }
-                </button>
-                <button class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors @(_activeTab == Tab.Endpoints ? "border-dusk-blue-500 text-dusk-blue-500" : "border-transparent text-gray-500 hover:text-gray-700")"
-                        @onclick="() => SwitchTab(Tab.Endpoints)">
-                    Endpoints
-                    @if (_endpoints is not null)
-                    {
-                        <span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">@_endpoints.Count</span>
-                    }
-                </button>
-            </div>
-
-            <div class="mt-4">
-                @if (_activeTab == Tab.TableConfigs)
-                {
-                    <DataGrid Loading="@(_tableConfigs is null)"
+            <DataGrid Loading="@(_tableConfigs is null)"
                               LoadingMessage="Loading table configurations..."
                               EmptyIcon="i-lucide-table"
                               EmptyMessage="No table configurations yet."
@@ -205,58 +183,6 @@ else
                             </QuickGrid>
                         </ChildContent>
                     </DataGrid>
-                }
-                else
-                {
-                    <DataGrid Loading="@(_endpoints is null)"
-                              LoadingMessage="Loading endpoints..."
-                              EmptyIcon="i-lucide-globe"
-                              EmptyMessage="No endpoints yet."
-                              ItemCount="@(_filteredEndpoints?.Count() ?? 0)"
-                              Pagination="@_endpointPagination"
-                              FilterPlaceholder="Search endpoints..."
-                              FilterText="@_endpointSearchText"
-                              FilterTextChanged="@(v => _endpointSearchText = v)"
-                              OnRefresh="@LoadEndpoints">
-                        <ToolbarContent>
-                            <button @onclick="OpenCreateEndpointDialog"
-                                    class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5">
-                                <span class="i-lucide-plus size-3.5"></span>
-                                Add Endpoint
-                            </button>
-                        </ToolbarContent>
-                        <ChildContent>
-                            <QuickGrid Items="@_filteredEndpoints" Pagination="@_endpointPagination" Theme="custom">
-                                <TemplateColumn Title="Name" SortBy="@(GridSort<EndpointDto>.ByAscending(e => e.Name))">
-                                    <span class="text-sm font-medium text-gray-900">@context.Name</span>
-                                </TemplateColumn>
-                                <TemplateColumn Title="Tags" SortBy="@(GridSort<EndpointDto>.ByAscending(e => e.Tags))">
-                                    <span class="text-sm text-gray-700">@(context.Tags ?? "—")</span>
-                                </TemplateColumn>
-                                <TemplateColumn Title="Auth">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetAuthTypeStyle(context.Authentication?.Type ?? -1)">
-                                        @GetAuthTypeLabel(context.Authentication?.Type ?? -1)
-                                    </span>
-                                </TemplateColumn>
-                                <TemplateColumn Title="Actions" Align="Align.End">
-                                    <div class="flex items-center justify-end gap-1">
-                                        <button @onclick="() => OpenEditEndpointDialog(context)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
-                                                title="Edit endpoint">
-                                            <span class="i-lucide-pencil size-4"></span>
-                                        </button>
-                                        <button @onclick="() => OpenDeleteEndpointDialog(context)"
-                                                class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
-                                                title="Delete endpoint">
-                                            <span class="i-lucide-trash-2 size-4"></span>
-                                        </button>
-                                    </div>
-                                </TemplateColumn>
-                            </QuickGrid>
-                        </ChildContent>
-                    </DataGrid>
-                }
-            </div>
         </div>
 
     </div>
@@ -449,163 +375,8 @@ else
     </div>
 }
 
-@* Create/Edit endpoint dialog *@
-@if (_showEndpointDialog)
-{
-    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseEndpointDialog"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded border border-gray-200 w-full max-w-lg" @onclick:stopPropagation="true">
-            <div class="p-6">
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
-                        <span class="i-lucide-globe size-5 text-dusk-blue-500"></span>
-                    </div>
-                    <h2 class="text-lg font-semibold text-gray-900">@(_editingEndpoint is null ? "Add Endpoint" : "Edit Endpoint")</h2>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                        <input type="text" @bind="_endpointName" placeholder="Endpoint name"
-                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                        <input type="text" @bind="_endpointTags" placeholder="Optional tags (comma-separated)"
-                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
-                        <select @bind="_endpointAuthType"
-                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
-                            <option value="-1">None</option>
-                            <option value="0">Basic</option>
-                            <option value="1">API Key</option>
-                            <option value="2">JWT</option>
-                        </select>
-                    </div>
-                    @if (_endpointAuthType == 0)
-                    {
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                            <input type="text" @bind="_endpointAuthUsername" placeholder="Username"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input type="password" @bind="_endpointAuthPassword" placeholder="Password"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                    }
-                    else if (_endpointAuthType == 1)
-                    {
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                            <input type="password" @bind="_endpointAuthApiKey" placeholder="API Key"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                    }
-                    else if (_endpointAuthType == 2)
-                    {
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">JWKS Endpoint</label>
-                            <input type="text" @bind="_endpointAuthJwksEndpoint" placeholder="https://example.com/.well-known/jwks.json"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Issuer</label>
-                            <input type="text" @bind="_endpointAuthIssuer" placeholder="https://example.com"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">User ID Claim</label>
-                            <input type="text" @bind="_endpointAuthUserIdClaim" placeholder="sub"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">User Name Claim</label>
-                            <input type="text" @bind="_endpointAuthUserNameClaim" placeholder="Optional"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                    }
-                </div>
-
-                @if (_dialogErrorMessages.Count > 0)
-                {
-                    <div class="mt-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
-                        @foreach (var error in _dialogErrorMessages)
-                        {
-                            <p class="text-sm text-ink-black-500">@error</p>
-                        }
-                    </div>
-                }
-
-                <div class="flex justify-end gap-3 mt-6">
-                    <button @onclick="CloseEndpointDialog"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button @onclick="SaveEndpoint" disabled="@(string.IsNullOrWhiteSpace(_endpointName) || _isDialogSaving)"
-                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
-                        @(_isDialogSaving ? "Saving..." : (_editingEndpoint is null ? "Add" : "Save"))
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
-@* Delete endpoint dialog *@
-@if (_showDeleteEndpointDialog)
-{
-    <div class="fixed inset-0 z-40 bg-black/50" @onclick="() => _showDeleteEndpointDialog = false"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
-            <div class="p-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
-                        <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
-                    </div>
-                    <h2 class="text-lg font-semibold text-gray-900">Delete Endpoint</h2>
-                </div>
-                <p class="text-sm text-gray-600 mb-2">
-                    This will permanently delete <strong>@_deletingEndpoint?.Name</strong>. This action cannot be undone.
-                </p>
-                <p class="text-sm text-gray-600 mb-4">
-                    Type <strong>@_deletingEndpoint?.Name</strong> to confirm:
-                </p>
-                <input type="text" @bind="_deleteEndpointConfirmText" placeholder="Enter endpoint name"
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ink-black-500 focus:border-ink-black-500 outline-none transition-colors mb-4" />
-
-                @if (_dialogErrorMessages.Count > 0)
-                {
-                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
-                        @foreach (var error in _dialogErrorMessages)
-                        {
-                            <p class="text-sm text-ink-black-500">@error</p>
-                        }
-                    </div>
-                }
-
-                <div class="flex justify-end gap-3">
-                    <button @onclick="() => _showDeleteEndpointDialog = false"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button @onclick="DeleteEndpoint" disabled="@(_isDialogSaving || _deleteEndpointConfirmText != _deletingEndpoint?.Name)"
-                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
-                        @(_isDialogSaving ? "Deleting..." : "Delete Endpoint")
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     [Parameter] public int ConfigId { get; set; }
-
-    private enum Tab { TableConfigs, Endpoints }
 
     // Config detail
     private ConfigurationDetailDto? _config;
@@ -629,9 +400,6 @@ else
     private string _deleteConfigConfirmText = "";
     private bool _isDeleting;
     private List<string> _deleteErrorMessages = [];
-
-    // Tabs
-    private Tab _activeTab = Tab.TableConfigs;
 
     // Table configurations
     private List<TableConfigDto>? _tableConfigs;
@@ -658,32 +426,8 @@ else
     private TableConfigDto? _deletingTable;
     private string _deleteTableConfirmText = "";
 
-    // Endpoints
-    private List<EndpointDto>? _endpoints;
-    private PaginationState _endpointPagination = new() { ItemsPerPage = 10 };
-    private string _endpointSearchText = "";
-    private bool _showEndpointDialog;
-    private EndpointDto? _editingEndpoint;
-    private string _endpointName = "";
-    private string _endpointTags = "";
-    private int _endpointAuthType = -1; // -1 = None
-    private string _endpointAuthUsername = "";
-    private string _endpointAuthPassword = "";
-    private string _endpointAuthApiKey = "";
-    private string _endpointAuthJwksEndpoint = "";
-    private string _endpointAuthIssuer = "";
-    private string _endpointAuthUserIdClaim = "sub";
-    private string _endpointAuthUserNameClaim = "";
-
-    // Delete endpoint
-    private bool _showDeleteEndpointDialog;
-    private EndpointDto? _deletingEndpoint;
-    private string _deleteEndpointConfirmText = "";
-
     private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName);
     private record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
-    private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
-    private record EndpointDto(Guid Id, string Name, string? Tags, AuthenticationDto? Authentication);
 
     private bool HasUnsavedChanges =>
         _name != _savedName || _description != _savedDescription || _version != _savedVersion
@@ -697,13 +441,6 @@ else
                 || (t.Schema?.Contains(_tableSearchText, StringComparison.OrdinalIgnoreCase) ?? false))
         ).AsQueryable();
 
-    private IQueryable<EndpointDto>? _filteredEndpoints =>
-        _endpoints?.Where(e =>
-            string.IsNullOrEmpty(_endpointSearchText)
-            || e.Name.Contains(_endpointSearchText, StringComparison.OrdinalIgnoreCase)
-            || (e.Tags?.Contains(_endpointSearchText, StringComparison.OrdinalIgnoreCase) ?? false)
-        ).AsQueryable();
-
     protected override async Task OnInitializedInteractiveAsync()
     {
         _dotNetRef = DotNetObjectReference.Create(this);
@@ -711,7 +448,6 @@ else
         await _jsModule.InvokeVoidAsync("register", _dotNetRef);
         await LoadConfiguration();
         await LoadTableConfigs();
-        await LoadEndpoints();
     }
 
     private async Task LoadConfiguration()
@@ -728,11 +464,6 @@ else
     private async Task LoadTableConfigs()
     {
         _tableConfigs = await Http.GetFromJsonAsync<List<TableConfigDto>>($"api/datastoreconfigurations/{ConfigId}/tables");
-    }
-
-    private async Task LoadEndpoints()
-    {
-        _endpoints = await Http.GetFromJsonAsync<List<EndpointDto>>($"api/datastoreconfigurations/{ConfigId}/endpoints");
     }
 
     // Unsaved changes
@@ -884,12 +615,6 @@ else
         }
     }
 
-    // Tab switching
-    private void SwitchTab(Tab tab)
-    {
-        _activeTab = tab;
-    }
-
     // Table selection
     private bool AllVisibleTablesSelected =>
         _filteredTableConfigs is not null
@@ -941,23 +666,6 @@ else
         2 => "bg-purple-100 text-purple-700",
         3 => "bg-gray-100 text-gray-500",
         _ => "bg-gray-100 text-gray-700"
-    };
-
-    // Auth type helpers
-    private static string GetAuthTypeLabel(int type) => type switch
-    {
-        0 => "Basic",
-        1 => "API Key",
-        2 => "JWT",
-        _ => "None"
-    };
-
-    private static string GetAuthTypeStyle(int type) => type switch
-    {
-        0 => "bg-dusk-blue-900 text-dusk-blue-500",
-        1 => "bg-green-100 text-green-700",
-        2 => "bg-purple-100 text-purple-700",
-        _ => "bg-gray-100 text-gray-500"
     };
 
     // Table config CRUD
@@ -1138,153 +846,4 @@ else
         }
     }
 
-    // Endpoint CRUD
-    private void OpenCreateEndpointDialog()
-    {
-        _editingEndpoint = null;
-        _endpointName = "";
-        _endpointTags = "";
-        ResetAuthFields();
-        _dialogErrorMessages = [];
-        _showEndpointDialog = true;
-    }
-
-    private void OpenEditEndpointDialog(EndpointDto endpoint)
-    {
-        _editingEndpoint = endpoint;
-        _endpointName = endpoint.Name;
-        _endpointTags = endpoint.Tags ?? "";
-        if (endpoint.Authentication is not null)
-        {
-            _endpointAuthType = endpoint.Authentication.Type;
-            _endpointAuthUsername = endpoint.Authentication.Username ?? "";
-            _endpointAuthPassword = endpoint.Authentication.Password ?? "";
-            _endpointAuthApiKey = endpoint.Authentication.ApiKey ?? "";
-            _endpointAuthJwksEndpoint = endpoint.Authentication.JwksEndpoint ?? "";
-            _endpointAuthIssuer = endpoint.Authentication.Issuer ?? "";
-            _endpointAuthUserIdClaim = endpoint.Authentication.UserIdClaim ?? "sub";
-            _endpointAuthUserNameClaim = endpoint.Authentication.UserNameClaim ?? "";
-        }
-        else
-        {
-            ResetAuthFields();
-        }
-        _dialogErrorMessages = [];
-        _showEndpointDialog = true;
-    }
-
-    private void CloseEndpointDialog()
-    {
-        _showEndpointDialog = false;
-        _editingEndpoint = null;
-        _dialogErrorMessages = [];
-    }
-
-    private void ResetAuthFields()
-    {
-        _endpointAuthType = -1;
-        _endpointAuthUsername = "";
-        _endpointAuthPassword = "";
-        _endpointAuthApiKey = "";
-        _endpointAuthJwksEndpoint = "";
-        _endpointAuthIssuer = "";
-        _endpointAuthUserIdClaim = "sub";
-        _endpointAuthUserNameClaim = "";
-    }
-
-    private async Task SaveEndpoint()
-    {
-        _isDialogSaving = true;
-        _dialogErrorMessages = [];
-
-        try
-        {
-            var auth = _endpointAuthType >= 0 ? new AuthenticationDto(
-                _endpointAuthType,
-                _endpointAuthType == 0 ? _endpointAuthUsername.Trim() : null,
-                _endpointAuthType == 0 ? _endpointAuthPassword.Trim() : null,
-                _endpointAuthType == 1 ? _endpointAuthApiKey.Trim() : null,
-                _endpointAuthType == 2 ? _endpointAuthJwksEndpoint.Trim() : null,
-                _endpointAuthType == 2 ? _endpointAuthIssuer.Trim() : null,
-                _endpointAuthType == 2 ? (string.IsNullOrWhiteSpace(_endpointAuthUserIdClaim) ? "sub" : _endpointAuthUserIdClaim.Trim()) : null,
-                _endpointAuthType == 2 ? (string.IsNullOrWhiteSpace(_endpointAuthUserNameClaim) ? null : _endpointAuthUserNameClaim.Trim()) : null
-            ) : (AuthenticationDto?)null;
-
-            var request = new
-            {
-                Name = _endpointName.Trim(),
-                Tags = string.IsNullOrWhiteSpace(_endpointTags) ? (string?)null : _endpointTags.Trim(),
-                Authentication = auth
-            };
-
-            HttpResponseMessage response;
-
-            if (_editingEndpoint is null)
-            {
-                response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/endpoints", request);
-            }
-            else
-            {
-                response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/endpoints/{_editingEndpoint.Id}", request);
-            }
-
-            if (response.IsSuccessStatusCode)
-            {
-                CloseEndpointDialog();
-                await LoadEndpoints();
-            }
-            else
-            {
-                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
-                _dialogErrorMessages = errors ?? ["An unexpected error occurred."];
-            }
-        }
-        catch (Exception ex)
-        {
-            _dialogErrorMessages = [ex.Message];
-        }
-        finally
-        {
-            _isDialogSaving = false;
-        }
-    }
-
-    private void OpenDeleteEndpointDialog(EndpointDto endpoint)
-    {
-        _deletingEndpoint = endpoint;
-        _deleteEndpointConfirmText = "";
-        _dialogErrorMessages = [];
-        _showDeleteEndpointDialog = true;
-    }
-
-    private async Task DeleteEndpoint()
-    {
-        _isDialogSaving = true;
-        _dialogErrorMessages = [];
-
-        try
-        {
-            var response = await Http.DeleteAsync($"api/datastoreconfigurations/{ConfigId}/endpoints/{_deletingEndpoint!.Id}");
-
-            if (response.IsSuccessStatusCode)
-            {
-                _showDeleteEndpointDialog = false;
-                _deletingEndpoint = null;
-                await LoadEndpoints();
-            }
-            else
-            {
-                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
-                _dialogErrorMessages = errors ?? ["An unexpected error occurred."];
-            }
-        }
-        catch (Exception ex)
-        {
-            _dialogErrorMessages = [ex.Message];
-        }
-        finally
-        {
-            _isDialogSaving = false;
-        }
-    }
 }
