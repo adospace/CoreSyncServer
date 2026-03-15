@@ -56,24 +56,32 @@ public class TableSorter : ITableSorter
             inDegree[GetKey(table)] = dependencies[GetKey(table)].Count;
         }
 
-        var queue = new Queue<string>();
+        // Use a ready set instead of a FIFO queue so we can prefer tables
+        // from the same schema as the last emitted table (schema grouping).
+        var ready = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, degree) in inDegree)
         {
             if (degree == 0)
-                queue.Enqueue(key);
+                ready.Add(key);
         }
 
         var sorted = new List<TableSchema>();
-        while (queue.Count > 0)
+        string? currentSchema = null;
+        while (ready.Count > 0)
         {
-            var key = queue.Dequeue();
-            sorted.Add(tableByKey[key]);
+            // Prefer a table from the same schema; fall back to alphabetical for stability
+            var key = PickNext(ready, currentSchema, tableByKey);
+            ready.Remove(key);
+
+            var table = tableByKey[key];
+            sorted.Add(table);
+            currentSchema = table.Schema;
 
             foreach (var dependent in dependents[key])
             {
                 inDegree[dependent]--;
                 if (inDegree[dependent] == 0)
-                    queue.Enqueue(dependent);
+                    ready.Add(dependent);
             }
         }
 
@@ -156,6 +164,38 @@ public class TableSorter : ITableSorter
 
         stack.RemoveAt(stack.Count - 1);
         onStack.Remove(start);
+    }
+
+    /// <summary>
+    /// Picks the next table to emit from the ready set, preferring tables whose schema
+    /// matches <paramref name="currentSchema"/> so that same-schema tables are grouped together.
+    /// Ties are broken alphabetically by fully-qualified name for deterministic output.
+    /// </summary>
+    private static string PickNext(
+        HashSet<string> ready,
+        string? currentSchema,
+        Dictionary<string, TableSchema> tableByKey)
+    {
+        string? best = null;
+        var bestMatchesSchema = false;
+
+        foreach (var candidate in ready)
+        {
+            var candidateSchema = tableByKey[candidate].Schema;
+            var matchesSchema = currentSchema is not null &&
+                string.Equals(candidateSchema, currentSchema, StringComparison.OrdinalIgnoreCase);
+
+            if (best is null
+                || (matchesSchema && !bestMatchesSchema)
+                || (matchesSchema == bestMatchesSchema &&
+                    string.Compare(candidate, best, StringComparison.OrdinalIgnoreCase) < 0))
+            {
+                best = candidate;
+                bestMatchesSchema = matchesSchema;
+            }
+        }
+
+        return best!;
     }
 
     private static string GetKey(TableSchema table) => GetKey(table.Schema, table.Name);

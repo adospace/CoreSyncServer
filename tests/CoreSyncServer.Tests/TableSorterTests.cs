@@ -170,24 +170,71 @@ public class TableSorterTests
         result.SortedTables.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Sort_WithMultipleSchemas_GroupsBySchema()
+    {
+        // Tables across two schemas with no cross-schema dependencies
+        var salesCustomers = CreateTable("Customers", "sales");
+        var salesOrders = CreateTable("Orders", "sales", ("CustomerId", "Customers", "Id", "sales"));
+        var hrEmployees = CreateTable("Employees", "hr");
+        var hrDepartments = CreateTable("Departments", "hr");
+
+        var result = _sorter.Sort([hrEmployees, salesOrders, hrDepartments, salesCustomers]);
+
+        result.HasCycles.Should().BeFalse();
+        var schemas = result.SortedTables.Select(t => t.Schema).ToList();
+        // All tables from the first schema should appear together before switching to the next
+        var firstSchema = schemas[0];
+        var switchIndex = schemas.FindIndex(s => !string.Equals(s, firstSchema, StringComparison.OrdinalIgnoreCase));
+        if (switchIndex >= 0)
+        {
+            // After switching, should not switch back
+            schemas.Skip(switchIndex).Should().AllSatisfy(s =>
+                s.Should().NotBe(firstSchema, "tables should be grouped by schema"));
+        }
+    }
+
+    [Fact]
+    public void Sort_WithCrossSchemaForeignKey_RespectsDependencyOrder()
+    {
+        // hr.Employees depends on sales.Customers (cross-schema FK)
+        var salesCustomers = CreateTable("Customers", "sales");
+        var salesOrders = CreateTable("Orders", "sales");
+        var hrEmployees = CreateTable("Employees", "hr", ("AccountManagerId", "Customers", "Id", "sales"));
+        var hrDepartments = CreateTable("Departments", "hr");
+
+        var result = _sorter.Sort([hrEmployees, salesOrders, hrDepartments, salesCustomers]);
+
+        result.HasCycles.Should().BeFalse();
+        var names = result.SortedTables.Select(t => $"{t.Schema}.{t.Name}").ToList();
+        names.IndexOf("sales.Customers").Should().BeLessThan(names.IndexOf("hr.Employees"),
+            "cross-schema dependency must be respected");
+    }
+
     private static TableSchema CreateTable(string name, params (string columnName, string refTable, string refColumn)[] foreignKeys)
+    {
+        return CreateTable(name, null, foreignKeys.Select(fk => (fk.columnName, fk.refTable, fk.refColumn, (string?)null)).ToArray());
+    }
+
+    private static TableSchema CreateTable(string name, string? schema, params (string columnName, string refTable, string refColumn, string? refSchema)[] foreignKeys)
     {
         var columns = new List<ColumnSchema>
         {
             new() { Name = "Id", DataType = "int", IsPrimaryKey = true }
         };
 
-        foreach (var (columnName, refTable, refColumn) in foreignKeys)
+        foreach (var (columnName, refTable, refColumn, refSchema) in foreignKeys)
         {
             columns.Add(new ColumnSchema
             {
                 Name = columnName,
                 DataType = "int",
                 ReferencedTableName = refTable,
+                ReferencedTableSchema = refSchema,
                 ReferencedColumnName = refColumn
             });
         }
 
-        return new TableSchema { Name = name, Columns = columns };
+        return new TableSchema { Name = name, Schema = schema, Columns = columns };
     }
 }
