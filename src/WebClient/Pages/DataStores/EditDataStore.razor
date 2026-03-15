@@ -291,6 +291,24 @@ else
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Draft</span>
                                     }
                                 </TemplateColumn>
+                                <TemplateColumn Title="URL">
+                                    @if (context.IsPublished)
+                                    {
+                                        var url = $"{NavigationManager.BaseUri}api/sync/{context.Id}";
+                                        <div class="group/url flex items-center gap-1.5">
+                                            <span class="text-sm text-gray-600 font-mono truncate max-w-[260px]" title="@url">@url</span>
+                                            <button @onclick="() => CopyToClipboard(url)"
+                                                    class="p-1 rounded text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors opacity-0 group-hover/url:opacity-100"
+                                                    title="Copy URL">
+                                                <span class="@(_copiedEndpointId == context.Id ? "i-lucide-check size-3.5 text-green-500" : "i-lucide-copy size-3.5")"></span>
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-sm text-gray-400 italic">Not published</span>
+                                    }
+                                </TemplateColumn>
                                 <TemplateColumn Title="Auth">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetAuthTypeStyle(context.Authentication?.Type ?? -1)">
                                         @GetAuthTypeLabel(context.Authentication?.Type ?? -1)
@@ -740,6 +758,8 @@ else
     private string _endpointSearchText = "";
     private bool _isSavingEndpoint;
     private List<string> _endpointErrorMessages = [];
+    private IJSObjectReference? _clipboardModule;
+    private Guid? _copiedEndpointId;
 
     // Create/Edit endpoint dialog
     private bool _showEndpointDialog;
@@ -855,6 +875,8 @@ else
             await _jsModule.DisposeAsync();
         }
         _dotNetRef?.Dispose();
+        if (_clipboardModule is not null)
+            await _clipboardModule.DisposeAsync();
     }
 
     private async Task LoadConfigurations()
@@ -1036,6 +1058,17 @@ else
         2 => "bg-purple-100 text-purple-700",
         _ => "bg-gray-100 text-gray-500"
     };
+
+    private async Task CopyToClipboard(string text)
+    {
+        _clipboardModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/clipboard.js");
+        await _clipboardModule.InvokeVoidAsync("copyText", text);
+        _copiedEndpointId = Guid.TryParse(text.Split('/').LastOrDefault(), out var id) ? id : null;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copiedEndpointId = null;
+        StateHasChanged();
+    }
 
     private async Task ToggleEndpointPublished(EndpointListDto endpoint)
     {
