@@ -37,24 +37,25 @@
             <p class="mt-2 text-sm">@LoadingMessage</p>
         </div>
     }
-    else if (ResolvedItemCount == 0)
-    {
-        <div class="p-12 text-center text-gray-400">
-            @if (!string.IsNullOrEmpty(EmptyIcon))
-            {
-                <span class="@EmptyIcon size-8 inline-block mb-2"></span>
-            }
-            <p class="text-sm">@EmptyMessage</p>
-        </div>
-    }
     else
     {
-        <div class="overflow-x-auto">
+        @if (ResolvedItemCount == 0)
+        {
+            <div class="p-12 text-center text-gray-400">
+                @if (!string.IsNullOrEmpty(EmptyIcon))
+                {
+                    <span class="@EmptyIcon size-8 inline-block mb-2"></span>
+                }
+                <p class="text-sm">@EmptyMessage</p>
+            </div>
+        }
+
+        @* Always render ChildContent so server-side QuickGrid stays in the DOM for refresh *@
+        <div class="overflow-x-auto" style="@(ResolvedItemCount == 0 ? "display:none" : "")">
             @ChildContent
         </div>
 
-        @if (ShowPagination && Pagination is not null
-            && (ItemCount is null || ResolvedItemCount > Pagination.ItemsPerPage))
+        @if (ShowPagination && Pagination is not null && ResolvedItemCount > Pagination.ItemsPerPage)
         {
             <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 text-sm text-gray-500">
                 <span>
