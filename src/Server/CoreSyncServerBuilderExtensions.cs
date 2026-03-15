@@ -51,7 +51,7 @@ public static class CoreSyncServerBuilderExtensions
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         builder.Services.AddCoreSyncData<TContext>(options =>
-            options.UseNpgsql(connectionString, b => b.MigrationsAssembly(typeof(TContext).Assembly.GetName().Name)));
+            options.UseNpgsql(connectionString, b => b.MigrationsAssembly("CoreSyncServer")));
         builder.Services.AddMemoryCache();
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 

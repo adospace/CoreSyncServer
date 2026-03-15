@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CoreSync;
 using CoreSync.PostgreSQL;
 using CoreSync.Sqlite;
@@ -36,7 +37,11 @@ internal class SyncProviderFactory : ISyncProviderFactory
 
         foreach (var table in tables)
         {
-            builder.Table(table.Name, syncDirection: MapSyncDirection(table.SyncMode));
+            builder.Table(table.Name,
+                syncDirection: MapSyncDirection(table.SyncMode),
+                skipInitialSnapshot: table.SkipInitialSnapshot,
+                selectIncrementalQuery: table.SelectIncrementalQuery,
+                customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
         return new SqliteSyncProvider(builder.Build(), ProviderMode.Remote);
@@ -48,7 +53,23 @@ internal class SyncProviderFactory : ISyncProviderFactory
 
         foreach (var table in tables)
         {
-            builder.Table(table.Name, syncDirection: MapSyncDirection(table.SyncMode), schema: table.Schema);
+            builder.Table(table.Name,
+                syncDirection: MapSyncDirection(table.SyncMode),
+                schema: table.Schema,
+                skipInitialSnapshot: table.SkipInitialSnapshot,
+                selectIncrementalQuery: table.SelectIncrementalQuery,
+                customSnapshotQuery: table.CustomSnapshotQuery);
+
+            var skipCols = DeserializeStringArray(table.SkipColumns);
+            if (skipCols.Length > 0)
+                builder.SkipColumns(skipCols);
+
+            var skipColsInsertUpdate = DeserializeStringArray(table.SkipColumnsOnInsertOrUpdate);
+            if (skipColsInsertUpdate.Length > 0)
+                builder.SkipColumnsOnInsertOrUpdate(skipColsInsertUpdate);
+
+            if (table.IdentityInsert != DataStoreTableConfigurationIdentityInsertMode.Auto)
+                builder.IdentityInsert((CoreSync.SqlServerCT.IdentityInsertMode)(int)table.IdentityInsert);
         }
 
         return new SqlServerCTProvider(builder.Build(), ProviderMode.Remote);
@@ -60,7 +81,26 @@ internal class SyncProviderFactory : ISyncProviderFactory
 
         foreach (var table in tables)
         {
-            builder.Table(table.Name, syncDirection: MapSyncDirection(table.SyncMode), schema: table.Schema);
+            builder.Table(table.Name,
+                syncDirection: MapSyncDirection(table.SyncMode),
+                schema: table.Schema,
+                skipInitialSnapshot: table.SkipInitialSnapshot,
+                selectIncrementalQuery: table.SelectIncrementalQuery,
+                customSnapshotQuery: table.CustomSnapshotQuery);
+
+            var skipCols = DeserializeStringArray(table.SkipColumns);
+            if (skipCols.Length > 0)
+                builder.SkipColumns(skipCols);
+
+            var skipColsInsertUpdate = DeserializeStringArray(table.SkipColumnsOnInsertOrUpdate);
+            if (skipColsInsertUpdate.Length > 0)
+                builder.SkipColumnsOnInsertOrUpdate(skipColsInsertUpdate);
+
+            if (table.IdentityInsert != DataStoreTableConfigurationIdentityInsertMode.Auto)
+                builder.IdentityInsert((CoreSync.SqlServer.IdentityInsertMode)(int)table.IdentityInsert);
+
+            if (table.ForceReloadInsertedRecords)
+                builder.ForceReloadInsertedRecords();
         }
 
         return new SqlSyncProvider(builder.Build(), ProviderMode.Remote);
@@ -72,10 +112,29 @@ internal class SyncProviderFactory : ISyncProviderFactory
 
         foreach (var table in tables)
         {
-            builder.Table(table.Name, syncDirection: MapSyncDirection(table.SyncMode));
+            builder.Table(table.Name,
+                syncDirection: MapSyncDirection(table.SyncMode),
+                skipInitialSnapshot: table.SkipInitialSnapshot,
+                selectIncrementalQuery: table.SelectIncrementalQuery,
+                customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
         return new PostgreSQLSyncProvider(builder.Build(), ProviderMode.Remote);
+    }
+
+    private static string[] DeserializeStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private static SyncDirection MapSyncDirection(DataStoreTableConfigurationSyncMode syncMode) => syncMode switch

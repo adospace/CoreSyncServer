@@ -7,6 +7,7 @@
 @layout DashboardLayout
 @rendermode InteractiveWebAssembly
 @using Microsoft.AspNetCore.Authorization
+@using System.Text.Json
 
 <PageTitle>Edit Configuration</PageTitle>
 
@@ -152,6 +153,37 @@ else
                                         @GetSyncModeLabel(context.SyncMode)
                                     </span>
                                 </TemplateColumn>
+                                <TemplateColumn Title="Options">
+                                    <div class="flex items-center gap-1 flex-wrap">
+                                        @if (context.SkipInitialSnapshot)
+                                        {
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">SKIP SNAPSHOT</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(context.SelectIncrementalQuery) || !string.IsNullOrEmpty(context.CustomSnapshotQuery))
+                                        {
+                                            <button @onclick="() => ShowSqlPreview(context)" @onclick:stopPropagation="true"
+                                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-dusk-blue-900 text-dusk-blue-500 hover:bg-dusk-blue-800 cursor-pointer transition-colors">
+                                                <span class="i-lucide-code size-3 mr-1"></span>
+                                                CUSTOM SQL
+                                            </button>
+                                        }
+                                        @if (IsSqlServer)
+                                        {
+                                            @if (GetSkipColumnsCount(context.SkipColumns) > 0)
+                                            {
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">@GetSkipColumnsCount(context.SkipColumns) skip cols</span>
+                                            }
+                                            @if (context.IdentityInsert != 0)
+                                            {
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">ID: @GetIdentityInsertLabel(context.IdentityInsert)</span>
+                                            }
+                                            @if (context.ForceReloadInsertedRecords)
+                                            {
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">FORCE RELOAD</span>
+                                            }
+                                        }
+                                    </div>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Status" SortBy="@(GridSort<TableConfigDto>.ByDescending(t => t.InError))">
                                     @if (context.InError)
                                     {
@@ -271,7 +303,7 @@ else
 {
     <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseTableDialog"></div>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto" @onclick:stopPropagation="true">
             <div class="p-6">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
@@ -281,15 +313,17 @@ else
                 </div>
 
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                        <input type="text" @bind="_tableName" placeholder="Table name"
-                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Schema</label>
-                        <input type="text" @bind="_tableSchema" placeholder="Optional schema (e.g. dbo)"
-                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input type="text" @bind="_tableName" placeholder="Table name"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Schema</label>
+                            <input type="text" @bind="_tableSchema" placeholder="Optional schema (e.g. dbo)"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Sync Mode</label>
@@ -301,6 +335,65 @@ else
                             <option value="3">Not Tracked</option>
                         </select>
                     </div>
+
+                    @* Snapshot & Incremental section *@
+                    <div class="border-t border-gray-200 pt-4 mt-4">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3">Snapshot &amp; Incremental</h3>
+                        <div class="space-y-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" @bind="_tableSkipInitialSnapshot"
+                                       class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                                <span class="text-sm text-gray-700">Skip initial snapshot</span>
+                            </label>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Select Incremental Query</label>
+                                <textarea @bind="_tableSelectIncrementalQuery" rows="3" placeholder="Optional custom SQL for incremental sync"
+                                          class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors font-mono text-sm resize-none"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Custom Snapshot Query</label>
+                                <textarea @bind="_tableCustomSnapshotQuery" rows="3" placeholder="Optional custom SQL for initial snapshot"
+                                          class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors font-mono text-sm resize-none"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* SQL Server options *@
+                    @if (IsSqlServer)
+                    {
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-sm font-semibold text-gray-900 mb-3">SQL Server Options</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Skip Columns</label>
+                                    <input type="text" @bind="_tableSkipColumns" placeholder="e.g. CreatedDate, ModifiedBy"
+                                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                                    <p class="text-xs text-gray-400 mt-1">Comma-separated column names to exclude from sync</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Skip Columns on Insert/Update</label>
+                                    <input type="text" @bind="_tableSkipColumnsOnInsertOrUpdate" placeholder="e.g. ComputedCol, Timestamp"
+                                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                                    <p class="text-xs text-gray-400 mt-1">Comma-separated column names to exclude only on insert/update</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Identity Insert</label>
+                                    <select @bind="_tableIdentityInsert"
+                                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
+                                        <option value="0">Auto</option>
+                                        <option value="1">On</option>
+                                        <option value="2">Off</option>
+                                        <option value="3">Disabled</option>
+                                    </select>
+                                </div>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" @bind="_tableForceReloadInsertedRecords"
+                                           class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                                    <span class="text-sm text-gray-700">Force reload inserted records</span>
+                                </label>
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 @if (_dialogErrorMessages.Count > 0)
@@ -375,6 +468,49 @@ else
     </div>
 }
 
+@* SQL Preview dialog *@
+@if (_showSqlPreview)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="() => _showSqlPreview = false"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-2xl max-h-[80vh] overflow-y-auto" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                            <span class="i-lucide-code size-5 text-dusk-blue-500"></span>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-gray-900">Custom SQL</h2>
+                            <p class="text-sm text-gray-500">@_sqlPreviewTableName</p>
+                        </div>
+                    </div>
+                    <button @onclick="() => _showSqlPreview = false"
+                            class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                        <span class="i-lucide-x size-5"></span>
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_sqlPreviewIncrementalQuery))
+                {
+                    <div class="mb-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Select Incremental Query</h3>
+                        <pre class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono text-gray-800 whitespace-pre-wrap overflow-x-auto">@_sqlPreviewIncrementalQuery</pre>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_sqlPreviewSnapshotQuery))
+                {
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Custom Snapshot Query</h3>
+                        <pre class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono text-gray-800 whitespace-pre-wrap overflow-x-auto">@_sqlPreviewSnapshotQuery</pre>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public int ConfigId { get; set; }
 
@@ -410,6 +546,13 @@ else
     private string _tableName = "";
     private string _tableSchema = "";
     private int _tableSyncMode;
+    private bool _tableSkipInitialSnapshot;
+    private string _tableSelectIncrementalQuery = "";
+    private string _tableCustomSnapshotQuery = "";
+    private string _tableSkipColumns = "";
+    private string _tableSkipColumnsOnInsertOrUpdate = "";
+    private int _tableIdentityInsert;
+    private bool _tableForceReloadInsertedRecords;
     private bool _isDialogSaving;
     private List<string> _dialogErrorMessages = [];
 
@@ -426,8 +569,20 @@ else
     private TableConfigDto? _deletingTable;
     private string _deleteTableConfirmText = "";
 
-    private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName);
-    private record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
+    // SQL preview
+    private bool _showSqlPreview;
+    private string _sqlPreviewTableName = "";
+    private string _sqlPreviewIncrementalQuery = "";
+    private string _sqlPreviewSnapshotQuery = "";
+
+    private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName, int DataStoreType);
+    private record TableConfigDto(
+        int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message,
+        bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
+        string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
+        bool ForceReloadInsertedRecords);
+
+    private bool IsSqlServer => _config?.DataStoreType == 1;
 
     private bool HasUnsavedChanges =>
         _name != _savedName || _description != _savedDescription || _version != _savedVersion
@@ -668,6 +823,62 @@ else
         _ => "bg-gray-100 text-gray-700"
     };
 
+    private static string GetIdentityInsertLabel(int mode) => mode switch
+    {
+        0 => "Auto",
+        1 => "On",
+        2 => "Off",
+        3 => "Disabled",
+        _ => "Unknown"
+    };
+
+    // JSON array <-> comma-separated helpers
+    private static string JsonArrayToCommaSeparated(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        try
+        {
+            var arr = JsonSerializer.Deserialize<string[]>(json);
+            return arr is not null ? string.Join(", ", arr) : "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string? CommaSeparatedToJsonArray(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var items = input.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => s.Length > 0)
+            .ToArray();
+        return items.Length > 0 ? JsonSerializer.Serialize(items) : null;
+    }
+
+    private static int GetSkipColumnsCount(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return 0;
+        try
+        {
+            var arr = JsonSerializer.Deserialize<string[]>(json);
+            return arr?.Length ?? 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    // SQL preview
+    private void ShowSqlPreview(TableConfigDto table)
+    {
+        _sqlPreviewTableName = table.Name;
+        _sqlPreviewIncrementalQuery = table.SelectIncrementalQuery ?? "";
+        _sqlPreviewSnapshotQuery = table.CustomSnapshotQuery ?? "";
+        _showSqlPreview = true;
+    }
+
     // Table config CRUD
     private void OpenCreateTableDialog()
     {
@@ -675,6 +886,13 @@ else
         _tableName = "";
         _tableSchema = "";
         _tableSyncMode = 0;
+        _tableSkipInitialSnapshot = false;
+        _tableSelectIncrementalQuery = "";
+        _tableCustomSnapshotQuery = "";
+        _tableSkipColumns = "";
+        _tableSkipColumnsOnInsertOrUpdate = "";
+        _tableIdentityInsert = 0;
+        _tableForceReloadInsertedRecords = false;
         _dialogErrorMessages = [];
         _showTableDialog = true;
     }
@@ -685,6 +903,13 @@ else
         _tableName = table.Name;
         _tableSchema = table.Schema ?? "";
         _tableSyncMode = table.SyncMode;
+        _tableSkipInitialSnapshot = table.SkipInitialSnapshot;
+        _tableSelectIncrementalQuery = table.SelectIncrementalQuery ?? "";
+        _tableCustomSnapshotQuery = table.CustomSnapshotQuery ?? "";
+        _tableSkipColumns = JsonArrayToCommaSeparated(table.SkipColumns);
+        _tableSkipColumnsOnInsertOrUpdate = JsonArrayToCommaSeparated(table.SkipColumnsOnInsertOrUpdate);
+        _tableIdentityInsert = table.IdentityInsert;
+        _tableForceReloadInsertedRecords = table.ForceReloadInsertedRecords;
         _dialogErrorMessages = [];
         _showTableDialog = true;
     }
@@ -707,7 +932,14 @@ else
             {
                 Name = _tableName.Trim(),
                 Schema = string.IsNullOrWhiteSpace(_tableSchema) ? (string?)null : _tableSchema.Trim(),
-                SyncMode = _tableSyncMode
+                SyncMode = _tableSyncMode,
+                SkipInitialSnapshot = _tableSkipInitialSnapshot,
+                SelectIncrementalQuery = string.IsNullOrWhiteSpace(_tableSelectIncrementalQuery) ? (string?)null : _tableSelectIncrementalQuery.Trim(),
+                CustomSnapshotQuery = string.IsNullOrWhiteSpace(_tableCustomSnapshotQuery) ? (string?)null : _tableCustomSnapshotQuery.Trim(),
+                SkipColumns = CommaSeparatedToJsonArray(_tableSkipColumns),
+                SkipColumnsOnInsertOrUpdate = CommaSeparatedToJsonArray(_tableSkipColumnsOnInsertOrUpdate),
+                IdentityInsert = _tableIdentityInsert,
+                ForceReloadInsertedRecords = _tableForceReloadInsertedRecords
             };
 
             HttpResponseMessage response;

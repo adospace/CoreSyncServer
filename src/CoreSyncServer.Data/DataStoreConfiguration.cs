@@ -42,6 +42,33 @@ public class DataStoreTableConfiguration
     public int Sort { get; set; }
 
     public string? Message { get; set; }
+
+    // Base sync properties (all providers)
+    public bool SkipInitialSnapshot { get; set; }
+
+    public string? SelectIncrementalQuery { get; set; }
+
+    public string? CustomSnapshotQuery { get; set; }
+
+    // SQL Server properties (Triggers + CT)
+    public string? SkipColumns { get; set; }
+
+    public string? SkipColumnsOnInsertOrUpdate { get; set; }
+
+    public DataStoreTableConfigurationIdentityInsertMode IdentityInsert { get; set; }
+
+    public bool ForceReloadInsertedRecords { get; set; }
+}
+
+public enum DataStoreTableConfigurationIdentityInsertMode
+{
+    Auto,
+
+    On,
+
+    Off,
+
+    Disabled
 }
 
 public enum DataStoreTableConfigurationSyncMode

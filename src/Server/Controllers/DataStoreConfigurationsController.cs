@@ -29,9 +29,14 @@ public class DataStoreConfigurationsController(
         string? Description,
         int Version,
         int DataStoreId,
-        string DataStoreName);
+        string DataStoreName,
+        int DataStoreType);
 
-    public record TableConfigDto(int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message);
+    public record TableConfigDto(
+        int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message,
+        bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
+        string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
+        bool ForceReloadInsertedRecords);
     public record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
     public record EndpointDto(Guid Id, string Name, string? Tags, AuthenticationDto? Authentication);
 
@@ -69,7 +74,8 @@ public class DataStoreConfigurationsController(
             config.Description,
             config.Version,
             config.DataStoreId,
-            config.DataStore!.Name));
+            config.DataStore!.Name,
+            (int)config.DataStore.Type));
     }
 
     public record CreateConfigurationRequest(string Name, int DataStoreId);
@@ -143,13 +149,20 @@ public class DataStoreConfigurationsController(
         var tables = await context.DataStoreTableConfigurations
             .Where(t => t.DataStoreConfigurationId == id)
             .OrderBy(t => t.Sort).ThenBy(t => t.Name)
-            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message))
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message,
+                t.SkipInitialSnapshot, t.SelectIncrementalQuery, t.CustomSnapshotQuery,
+                t.SkipColumns, t.SkipColumnsOnInsertOrUpdate, (int)t.IdentityInsert,
+                t.ForceReloadInsertedRecords))
             .ToListAsync();
 
         return Ok(tables);
     }
 
-    public record CreateTableConfigRequest(string Name, string? Schema, int SyncMode);
+    public record CreateTableConfigRequest(
+        string Name, string? Schema, int SyncMode,
+        bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
+        string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
+        bool ForceReloadInsertedRecords);
 
     [HttpPost("{id}/tables")]
     public async Task<ActionResult<TableConfigDto>> CreateTable(int id, [FromBody] CreateTableConfigRequest request)
@@ -165,16 +178,30 @@ public class DataStoreConfigurationsController(
             Name = request.Name.Trim(),
             Schema = request.Schema?.Trim(),
             SyncMode = (DataStoreTableConfigurationSyncMode)request.SyncMode,
-            DataStoreConfigurationId = id
+            DataStoreConfigurationId = id,
+            SkipInitialSnapshot = request.SkipInitialSnapshot,
+            SelectIncrementalQuery = request.SelectIncrementalQuery?.Trim(),
+            CustomSnapshotQuery = request.CustomSnapshotQuery?.Trim(),
+            SkipColumns = request.SkipColumns?.Trim(),
+            SkipColumnsOnInsertOrUpdate = request.SkipColumnsOnInsertOrUpdate?.Trim(),
+            IdentityInsert = (DataStoreTableConfigurationIdentityInsertMode)request.IdentityInsert,
+            ForceReloadInsertedRecords = request.ForceReloadInsertedRecords
         };
 
         context.DataStoreTableConfigurations.Add(table);
         await context.SaveChangesAsync();
 
-        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncMode, table.InError, table.Sort, table.Message));
+        return Ok(new TableConfigDto(table.Id, table.Name, table.Schema, (int)table.SyncMode, table.InError, table.Sort, table.Message,
+            table.SkipInitialSnapshot, table.SelectIncrementalQuery, table.CustomSnapshotQuery,
+            table.SkipColumns, table.SkipColumnsOnInsertOrUpdate, (int)table.IdentityInsert,
+            table.ForceReloadInsertedRecords));
     }
 
-    public record UpdateTableConfigRequest(string Name, string? Schema, int SyncMode);
+    public record UpdateTableConfigRequest(
+        string Name, string? Schema, int SyncMode,
+        bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
+        string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
+        bool ForceReloadInsertedRecords);
 
     [HttpPut("{id}/tables/{tableId}")]
     public async Task<ActionResult> UpdateTable(int id, int tableId, [FromBody] UpdateTableConfigRequest request)
@@ -190,6 +217,13 @@ public class DataStoreConfigurationsController(
         table.Name = request.Name.Trim();
         table.Schema = request.Schema?.Trim();
         table.SyncMode = (DataStoreTableConfigurationSyncMode)request.SyncMode;
+        table.SkipInitialSnapshot = request.SkipInitialSnapshot;
+        table.SelectIncrementalQuery = request.SelectIncrementalQuery?.Trim();
+        table.CustomSnapshotQuery = request.CustomSnapshotQuery?.Trim();
+        table.SkipColumns = request.SkipColumns?.Trim();
+        table.SkipColumnsOnInsertOrUpdate = request.SkipColumnsOnInsertOrUpdate?.Trim();
+        table.IdentityInsert = (DataStoreTableConfigurationIdentityInsertMode)request.IdentityInsert;
+        table.ForceReloadInsertedRecords = request.ForceReloadInsertedRecords;
         await context.SaveChangesAsync();
 
         return NoContent();
@@ -238,7 +272,10 @@ public class DataStoreConfigurationsController(
             return result.Error == "Configuration not found." ? NotFound() : BadRequest(new[] { result.Error });
 
         var tables = result.Tables
-            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message))
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message,
+                t.SkipInitialSnapshot, t.SelectIncrementalQuery, t.CustomSnapshotQuery,
+                t.SkipColumns, t.SkipColumnsOnInsertOrUpdate, (int)t.IdentityInsert,
+                t.ForceReloadInsertedRecords))
             .ToList();
 
         return Ok(tables);
