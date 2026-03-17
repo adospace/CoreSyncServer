@@ -22,7 +22,7 @@
 		<ProjectReference Include="..\..\CoreSync\src\CoreSync.SqlServerCT\CoreSync.SqlServerCT.csproj" />
 		<ProjectReference Include="..\..\CoreSync\src\CoreSync.SqlServer\CoreSync.SqlServer.csproj" />
 		<ProjectReference Include="..\..\CoreSync\src\CoreSync\CoreSync.csproj" />
-		<ProjectReference Include="..\CoreSyncServer.Data\CoreSyncServer.Data.csproj" />
+		<ProjectReference Include="..\Data\CoreSyncServer.Data.csproj" />
 	</ItemGroup>
 
 </Project>
