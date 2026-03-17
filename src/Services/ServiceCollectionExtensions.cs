@@ -54,6 +54,10 @@ namespace CoreSyncServer.Services
             services.AddSingleton<MonitorTask, SchemaUpdateMonitorTask>();
             services.AddSingleton<IMonitorService, MonitorService>();
 
+            services.AddSingleton<MaintenanceTask, DiagnosticMaintenanceTask>();
+            services.AddSingleton<MaintenanceTask, SyncSessionMaintenanceTask>();
+            services.AddSingleton<IMaintenanceService, MaintenanceService>();
+
             return services;
         }
     }

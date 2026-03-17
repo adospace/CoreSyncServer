@@ -66,6 +66,9 @@ public static class CoreSyncServerBuilderExtensions
         builder.Services.Configure<MonitorSettings>(builder.Configuration.GetSection("Monitor"));
         builder.Services.AddHostedService<CoreSyncServer.Server.Services.MonitorHostedService>();
 
+        builder.Services.Configure<CoreSyncServer.Services.MaintenanceSettings>(builder.Configuration.GetSection("Maintenance"));
+        builder.Services.AddHostedService<CoreSyncServer.Server.Services.MaintenanceHostedService>();
+
         builder.Services.AddScoped(sp =>
         {
             var navigationManager = sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
