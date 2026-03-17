@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace CoreSyncServer.Data;
 
 public class SyncSession
@@ -10,6 +12,7 @@ public class SyncSession
     public SyncSessionStatus Status { get; set; }
 
     public IList<DiagnosticItem> DiagnosticItems { get; set; } = [];
+    public IList<SyncSessionTrace> Traces { get; set; } = [];
 }
 
 public enum SyncSessionStatus
@@ -20,3 +23,21 @@ public enum SyncSessionStatus
 
     Error = 2
 }
+
+public class SyncSessionTrace
+{
+    public int Id {get;set;}
+
+    public int SyncSessionId{get;set;}
+
+    public SyncSession? SyncSession{get;set;}
+
+    public required string Message{get;set;}
+
+
+    public DateTime TimeStamp{get;set;}
+
+    public TraceLevel TraceLevel{get;set;}
+
+}
+

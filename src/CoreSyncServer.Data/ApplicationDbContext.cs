@@ -23,6 +23,8 @@ namespace CoreSyncServer.Data
         public DbSet<Endpoint> Endpoints => Set<Endpoint>();
         public DbSet<EndPointAuthentication> EndPointAuthentications => Set<EndPointAuthentication>();
         public DbSet<DiagnosticItem> DiagnosticItems => Set<DiagnosticItem>();
+        public DbSet<SyncSession> SyncSessions => Set<SyncSession>();
+        public DbSet<SyncSessionTrace> SyncSessionTraces => Set<SyncSessionTrace>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -98,6 +100,18 @@ namespace CoreSyncServer.Data
                 .WithMany(e => e.DiagnosticItems)
                 .HasForeignKey(d => d.EndpointId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Configure SyncSession -> DataStore relationship
+            builder.Entity<SyncSession>()
+                .HasOne(s => s.DataStore)
+                .WithMany(d => d.SyncSessions)
+                .HasForeignKey(s => s.DataStoreId);
+
+            // Configure SyncSessionTrace -> SyncSession relationship
+            builder.Entity<SyncSessionTrace>()
+                .HasOne(t => t.SyncSession)
+                .WithMany(s => s.Traces)
+                .HasForeignKey(t => t.SyncSessionId);
 
             // Configure Endpoint -> EndPointAuthentication relationship
             builder.Entity<Endpoint>()

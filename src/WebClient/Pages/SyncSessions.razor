@@ -1,0 +1,217 @@
+@page "/sync-sessions"
+@page "/sync-sessions/project/{ProjectId:int}"
+@attribute [Authorize]
+@inherits InteractivePage
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Sync Sessions</PageTitle>
+
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Sync Sessions</h1>
+            <p class="text-gray-500 mt-1">Track and query sync session activity.</p>
+        </div>
+    </div>
+
+    <DataGrid Loading="@(!_initialized)"
+              LoadingMessage="Loading sync sessions..."
+              EmptyIcon="i-lucide-activity"
+              EmptyMessage="No sync sessions found."
+              ItemCount="@_totalCount"
+              Pagination="@_pagination"
+              PageSizeOptions="@(new[] { 15, 25, 50 })"
+              FilterPlaceholder="Search data stores or projects..."
+              FilterText="@_searchText"
+              FilterTextChanged="@HandleFilter"
+              RowClickable="true"
+              OnRefresh="@RefreshGrid">
+        <ToolbarContent>
+            <div class="flex items-center gap-3">
+                <select @bind="_filterStatus" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="">All Statuses</option>
+                    <option value="0">Started</option>
+                    <option value="1">Completed</option>
+                    <option value="2">Error</option>
+                </select>
+                <select @bind="_filterProjectId" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="">All Projects</option>
+                    @if (_projects is not null)
+                    {
+                        @foreach (var project in _projects)
+                        {
+                            <option value="@project.Id">@project.Name</option>
+                        }
+                    }
+                </select>
+                <select @bind="_filterDataStoreId" @bind:after="OnFiltersChanged"
+                        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                    <option value="">All Data Stores</option>
+                    @if (_dataStores is not null)
+                    {
+                        @foreach (var ds in _dataStores)
+                        {
+                            <option value="@ds.Id">@ds.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+        </ToolbarContent>
+        <ChildContent>
+            <QuickGrid @ref="_grid" ItemsProvider="@_itemsProvider" Pagination="@_pagination" Theme="custom">
+                <TemplateColumn Title="Status" SortBy="@(GridSort<SyncSessionDto>.ByAscending(s => s.Status))">
+                    <a href="/sync-sessions/@context.Id" class="row-link">
+                        <span class="@GetStatusBadgeClass(context.Status)">@GetStatusLabel(context.Status)</span>
+                    </a>
+                </TemplateColumn>
+                <PropertyColumn Property="@(s => s.DataStoreName)" Title="Data Store" />
+                <PropertyColumn Property="@(s => s.ProjectName)" Title="Project" />
+                <TemplateColumn Title="Start Time" SortBy="@(GridSort<SyncSessionDto>.ByDescending(s => s.StartTime))">
+                    @context.StartTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                </TemplateColumn>
+                <TemplateColumn Title="Duration">
+                    @if (context.EndTime.HasValue)
+                    {
+                        var duration = context.EndTime.Value - context.StartTime;
+                        @FormatDuration(duration)
+                    }
+                    else
+                    {
+                        <span class="text-sm text-amber-600 font-medium">In progress</span>
+                    }
+                </TemplateColumn>
+                <PropertyColumn Property="@(s => s.DiagnosticCount)" Title="Diagnostics" />
+                <PropertyColumn Property="@(s => s.TraceCount)" Title="Traces" />
+            </QuickGrid>
+        </ChildContent>
+    </DataGrid>
+</div>
+
+@code {
+    [Parameter]
+    public int? ProjectId { get; set; }
+
+    private QuickGrid<SyncSessionDto>? _grid;
+    private PaginationState _pagination = new() { ItemsPerPage = 15 };
+    private GridItemsProvider<SyncSessionDto>? _itemsProvider;
+    private bool _initialized;
+    private int _totalCount;
+
+    // Filters
+    private string _searchText = "";
+    private string _filterStatus = "";
+    private string _filterProjectId = "";
+    private string _filterDataStoreId = "";
+
+    // Lookups
+    private List<LookupOption>? _projects;
+    private List<LookupOption>? _dataStores;
+
+    private record LookupOption(int Id, string Name);
+
+    private record SyncSessionDto(
+        int Id,
+        DateTime StartTime,
+        DateTime? EndTime,
+        int Status,
+        int DataStoreId,
+        string DataStoreName,
+        int? ProjectId,
+        string? ProjectName,
+        int DiagnosticCount,
+        int TraceCount);
+
+    private record SyncSessionsPagedResult(List<SyncSessionDto> Items, int TotalCount);
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        _projects = await Http.GetFromJsonAsync<List<LookupOption>>("api/projects");
+        _dataStores = await Http.GetFromJsonAsync<List<LookupOption>>("api/datastores");
+
+        if (ProjectId.HasValue)
+            _filterProjectId = ProjectId.Value.ToString();
+
+        _itemsProvider = async request =>
+        {
+            var query = BuildQueryString(request.StartIndex / _pagination.ItemsPerPage, _pagination.ItemsPerPage);
+            var result = await Http.GetFromJsonAsync<SyncSessionsPagedResult>($"api/sync-sessions{query}", request.CancellationToken);
+
+            _totalCount = result!.TotalCount;
+            StateHasChanged();
+
+            return GridItemsProviderResult.From(
+                result.Items,
+                result.TotalCount);
+        };
+
+        _initialized = true;
+    }
+
+    private string BuildQueryString(int page, int pageSize)
+    {
+        var parts = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+            parts.Add($"search={Uri.EscapeDataString(_searchText)}");
+
+        if (!string.IsNullOrEmpty(_filterStatus))
+            parts.Add($"status={_filterStatus}");
+
+        if (!string.IsNullOrEmpty(_filterProjectId))
+            parts.Add($"projectId={_filterProjectId}");
+
+        if (!string.IsNullOrEmpty(_filterDataStoreId))
+            parts.Add($"dataStoreId={_filterDataStoreId}");
+
+        return "?" + string.Join("&", parts);
+    }
+
+    private async Task HandleFilter(string value)
+    {
+        _searchText = value;
+        await RefreshGrid();
+    }
+
+    private async Task OnFiltersChanged()
+    {
+        await RefreshGrid();
+    }
+
+    private async Task RefreshGrid()
+    {
+        if (_grid is not null)
+            await _grid.RefreshDataAsync();
+    }
+
+    private static string GetStatusLabel(int status) => status switch
+    {
+        0 => "Started",
+        1 => "Completed",
+        2 => "Error",
+        _ => "Unknown"
+    };
+
+    private static string GetStatusBadgeClass(int status) => status switch
+    {
+        0 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800",
+        1 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800",
+        2 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800",
+        _ => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+    };
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds < 1) return $"{duration.Milliseconds}ms";
+        if (duration.TotalMinutes < 1) return $"{duration.Seconds}s";
+        if (duration.TotalHours < 1) return $"{(int)duration.TotalMinutes}m {duration.Seconds}s";
+        return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+    }
+}

@@ -1,0 +1,265 @@
+@page "/sync-sessions/{SessionId:int}"
+@attribute [Authorize]
+@inherits InteractivePage
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Sync Session Detail</PageTitle>
+
+<div class="space-y-6">
+    @* Back link and header *@
+    <div class="flex items-center gap-4">
+        <a href="/sync-sessions" class="text-gray-400 hover:text-gray-600 transition-colors">
+            <span class="i-lucide-arrow-left size-5"></span>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Sync Session #@SessionId</h1>
+            @if (_session is not null)
+            {
+                <p class="text-gray-500 mt-1">@_session.DataStoreName @(_session.ProjectName is not null ? $"/ {_session.ProjectName}" : "")</p>
+            }
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="flex items-center justify-center py-12">
+            <div class="animate-spin i-lucide-loader-2 size-6 text-dusk-blue-500"></div>
+            <span class="ml-2 text-gray-500">Loading session...</span>
+        </div>
+    }
+    else if (_session is null)
+    {
+        <div class="text-center py-12">
+            <span class="i-lucide-alert-circle size-12 text-gray-300 mx-auto"></span>
+            <p class="text-gray-500 mt-2">Session not found.</p>
+        </div>
+    }
+    else
+    {
+        @* Summary cards *@
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</p>
+                <span class="@GetStatusBadgeClass(_session.Status) mt-2">@GetStatusLabel(_session.Status)</span>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Start Time</p>
+                <p class="text-sm font-semibold text-gray-900 mt-1">@_session.StartTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">End Time</p>
+                <p class="text-sm font-semibold text-gray-900 mt-1">
+                    @if (_session.EndTime.HasValue)
+                    {
+                        @_session.EndTime.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    }
+                    else
+                    {
+                        <span class="text-amber-600">In progress</span>
+                    }
+                </p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Duration</p>
+                <p class="text-sm font-semibold text-gray-900 mt-1">
+                    @if (_session.EndTime.HasValue)
+                    {
+                        @FormatDuration(_session.EndTime.Value - _session.StartTime)
+                    }
+                    else
+                    {
+                        <span class="text-amber-600">-</span>
+                    }
+                </p>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Diagnostics</p>
+                <p class="text-sm font-semibold text-gray-900 mt-1">@_session.DiagnosticCount</p>
+            </div>
+        </div>
+
+        @* Traces *@
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900 mb-3">Traces</h2>
+            <DataGrid Loading="@(!_tracesInitialized)"
+                      LoadingMessage="Loading traces..."
+                      EmptyIcon="i-lucide-file-text"
+                      EmptyMessage="No traces recorded for this session."
+                      ItemCount="@_traceTotalCount"
+                      Pagination="@_tracePagination"
+                      PageSizeOptions="@(new[] { 25, 50, 100 })"
+                      FilterPlaceholder="Search messages..."
+                      FilterText="@_traceSearchText"
+                      FilterTextChanged="@HandleTraceFilter"
+                      OnRefresh="@RefreshTraceGrid">
+                <ToolbarContent>
+                    <div class="flex items-center gap-3">
+                        <select @bind="_filterTraceLevel" @bind:after="OnTraceFiltersChanged"
+                                class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors">
+                            <option value="1">Error</option>
+                            <option value="2">Warning & above</option>
+                            <option value="3">Info & above</option>
+                            <option value="4">Verbose & above</option>
+                        </select>
+                    </div>
+                </ToolbarContent>
+                <ChildContent>
+                    <QuickGrid @ref="_traceGrid" ItemsProvider="@_traceItemsProvider" Pagination="@_tracePagination" Theme="custom">
+                        <TemplateColumn Title="Timestamp" SortBy="@(GridSort<SyncSessionTraceDto>.ByAscending(t => t.TimeStamp))">
+                            @context.TimeStamp.ToLocalTime().ToString("HH:mm:ss.fff")
+                        </TemplateColumn>
+                        <TemplateColumn Title="Level">
+                            <span class="@GetTraceLevelBadgeClass(context.TraceLevel)">@GetTraceLevelLabel(context.TraceLevel)</span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Message">
+                            <span class="text-sm font-mono">@context.Message</span>
+                        </TemplateColumn>
+                    </QuickGrid>
+                </ChildContent>
+            </DataGrid>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int SessionId { get; set; }
+
+    private SyncSessionDetailDto? _session;
+    private bool _loading = true;
+
+    // Traces grid
+    private QuickGrid<SyncSessionTraceDto>? _traceGrid;
+    private PaginationState _tracePagination = new() { ItemsPerPage = 25 };
+    private GridItemsProvider<SyncSessionTraceDto>? _traceItemsProvider;
+    private bool _tracesInitialized;
+    private int _traceTotalCount;
+    private string _traceSearchText = "";
+    private string _filterTraceLevel = "3";
+
+    private record SyncSessionTraceDto(int Id, string Message, DateTime TimeStamp, int TraceLevel);
+    private record SyncSessionTracesPagedResult(List<SyncSessionTraceDto> Items, int TotalCount);
+
+    private record SyncSessionDetailDto(
+        int Id,
+        DateTime StartTime,
+        DateTime? EndTime,
+        int Status,
+        string DataStoreName,
+        string? ProjectName,
+        int TraceCount,
+        int DiagnosticCount);
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        try
+        {
+            _session = await Http.GetFromJsonAsync<SyncSessionDetailDto>($"api/sync-sessions/{SessionId}");
+        }
+        catch (HttpRequestException)
+        {
+            _session = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        if (_session is not null)
+        {
+            _traceItemsProvider = async request =>
+            {
+                var query = BuildTraceQueryString(request.StartIndex / _tracePagination.ItemsPerPage, _tracePagination.ItemsPerPage);
+                var result = await Http.GetFromJsonAsync<SyncSessionTracesPagedResult>($"api/sync-sessions/{SessionId}/traces{query}", request.CancellationToken);
+
+                _traceTotalCount = result!.TotalCount;
+                StateHasChanged();
+
+                return GridItemsProviderResult.From(
+                    result.Items,
+                    result.TotalCount);
+            };
+
+            _tracesInitialized = true;
+        }
+    }
+
+    private string BuildTraceQueryString(int page, int pageSize)
+    {
+        var parts = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(_traceSearchText))
+            parts.Add($"search={Uri.EscapeDataString(_traceSearchText)}");
+
+        if (!string.IsNullOrEmpty(_filterTraceLevel))
+            parts.Add($"traceLevel={_filterTraceLevel}");
+
+        return "?" + string.Join("&", parts);
+    }
+
+    private async Task HandleTraceFilter(string value)
+    {
+        _traceSearchText = value;
+        await RefreshTraceGrid();
+    }
+
+    private async Task OnTraceFiltersChanged()
+    {
+        await RefreshTraceGrid();
+    }
+
+    private async Task RefreshTraceGrid()
+    {
+        if (_traceGrid is not null)
+            await _traceGrid.RefreshDataAsync();
+    }
+
+    private static string GetStatusLabel(int status) => status switch
+    {
+        0 => "Started",
+        1 => "Completed",
+        2 => "Error",
+        _ => "Unknown"
+    };
+
+    private static string GetStatusBadgeClass(int status) => status switch
+    {
+        0 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800",
+        1 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800",
+        2 => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800",
+        _ => "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+    };
+
+    private static string GetTraceLevelLabel(int level) => level switch
+    {
+        0 => "Off",
+        1 => "Error",
+        2 => "Warning",
+        3 => "Info",
+        4 => "Verbose",
+        _ => "Unknown"
+    };
+
+    private static string GetTraceLevelBadgeClass(int level) => level switch
+    {
+        1 => "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800",
+        2 => "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800",
+        3 => "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800",
+        4 => "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600",
+        _ => "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-500"
+    };
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds < 1) return $"{duration.Milliseconds}ms";
+        if (duration.TotalMinutes < 1) return $"{duration.Seconds}s";
+        if (duration.TotalHours < 1) return $"{(int)duration.TotalMinutes}m {duration.Seconds}s";
+        return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+    }
+}

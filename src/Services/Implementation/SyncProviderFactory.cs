@@ -13,8 +13,10 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 {
     private readonly ISyncLogger _syncLogger = new SyncLoggerAdapter(logger);
 
-    public ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration)
+    public ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration, ISyncLogger? logger = null)
     {
+        var effectiveLogger = logger ?? _syncLogger;
+
         var dataStore = configuration.DataStore
             ?? throw new InvalidOperationException("DataStore must be loaded on the configuration.");
 
@@ -25,16 +27,16 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 
         return dataStore switch
         {
-            SqliteDataStore sqlite => CreateSqliteProvider(sqlite, tables),
+            SqliteDataStore sqlite => CreateSqliteProvider(sqlite, tables, effectiveLogger),
             SqlServerDataStore { TrackingMode: SqlServerDataStoreTrackingMode.ChangeTracking } sqlServer
-                => CreateSqlServerCTProvider(sqlServer, tables),
-            SqlServerDataStore sqlServer => CreateSqlServerProvider(sqlServer, tables),
-            PostgreSqlDataStore postgres => CreatePostgresProvider(postgres, tables),
+                => CreateSqlServerCTProvider(sqlServer, tables, effectiveLogger),
+            SqlServerDataStore sqlServer => CreateSqlServerProvider(sqlServer, tables, effectiveLogger),
+            PostgreSqlDataStore postgres => CreatePostgresProvider(postgres, tables, effectiveLogger),
             _ => throw new NotSupportedException($"DataStore type '{dataStore.GetType().Name}' is not supported.")
         };
     }
 
-    private ISyncProvider CreateSqliteProvider(SqliteDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqliteProvider(SqliteDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
         var builder = new SqliteSyncConfigurationBuilder($"Data Source={dataStore.FilePath}");
 
@@ -47,10 +49,10 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
                 customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
-        return new SqliteSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
+        return new SqliteSyncProvider(builder.Build(), ProviderMode.Remote, syncLogger);
     }
 
-    private ISyncProvider CreateSqlServerCTProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqlServerCTProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
         var builder = new SqlServerCTSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -75,10 +77,10 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
                 builder.IdentityInsert((CoreSync.SqlServerCT.IdentityInsertMode)(int)table.IdentityInsert);
         }
 
-        return new SqlServerCTProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
+        return new SqlServerCTProvider(builder.Build(), ProviderMode.Remote, syncLogger);
     }
 
-    private ISyncProvider CreateSqlServerProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreateSqlServerProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
         var builder = new SqlSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -106,10 +108,10 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
                 builder.ForceReloadInsertedRecords();
         }
 
-        return new SqlSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
+        return new SqlSyncProvider(builder.Build(), ProviderMode.Remote, syncLogger);
     }
 
-    private ISyncProvider CreatePostgresProvider(PostgreSqlDataStore dataStore, List<DataStoreTableConfiguration> tables)
+    private ISyncProvider CreatePostgresProvider(PostgreSqlDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
         var builder = new PostgreSQLSyncConfigurationBuilder(dataStore.ConnectionString);
 
@@ -122,7 +124,7 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
                 customSnapshotQuery: table.CustomSnapshotQuery);
         }
 
-        return new PostgreSQLSyncProvider(builder.Build(), ProviderMode.Remote, _syncLogger);
+        return new PostgreSQLSyncProvider(builder.Build(), ProviderMode.Remote, syncLogger);
     }
 
     private static string[] DeserializeStringArray(string? json)

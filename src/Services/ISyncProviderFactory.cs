@@ -5,5 +5,5 @@ namespace CoreSyncServer.Services;
 
 public interface ISyncProviderFactory
 {
-    ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration);
+    ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration, ISyncLogger? logger = null);
 }

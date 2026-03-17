@@ -2,6 +2,7 @@ using CoreSync;
 using CoreSync.Http;
 using CoreSyncServer.Data;
 using CoreSyncServer.Services;
+using CoreSyncServer.Services.Implementation;
 using MessagePack;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ namespace CoreSyncServer.Controllers;
 public class SyncController(
     ApplicationDbContext context,
     ISyncProviderFactory syncProviderFactory,
+    ISyncSessionService syncSessionService,
     IMemoryCache memoryCache,
     ILogger<SyncController> logger) : ControllerBase
 {
@@ -24,7 +26,13 @@ public class SyncController(
         public List<SyncItem> BufferList { get; set; } = [];
     }
 
-    private async Task<ISyncProvider> GetSyncProviderAsync(Guid endpointId, CancellationToken cancellationToken)
+    private class CachedUploadSession
+    {
+        public required SyncChangeSet ChangeSet { get; set; }
+        public int SyncSessionId { get; set; }
+    }
+
+    private async Task<Data.Endpoint> GetEndpointAsync(Guid endpointId, CancellationToken cancellationToken)
     {
         var endpoint = await context.Endpoints
             .Include(e => e.DataStoreConfiguration)
@@ -37,7 +45,12 @@ public class SyncController(
         if (endpoint.DataStoreConfiguration is null)
             throw new InvalidOperationException($"Endpoint '{endpointId}' has no associated DataStoreConfiguration.");
 
-        return syncProviderFactory.CreateSyncProvider(endpoint.DataStoreConfiguration);
+        return endpoint;
+    }
+
+    private ISyncProvider CreateProvider(DataStoreConfiguration configuration, ISyncLogger? sessionLogger = null)
+    {
+        return syncProviderFactory.CreateSyncProvider(configuration, sessionLogger);
     }
 
     [HttpGet("store-id")]
@@ -45,7 +58,8 @@ public class SyncController(
     {
         try
         {
-            var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
+            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
             var storeId = await provider.GetStoreIdAsync(cancellationToken);
             return Ok(storeId.ToString());
         }
@@ -60,7 +74,8 @@ public class SyncController(
     {
         try
         {
-            var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
+            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
             var version = await provider.GetSyncVersionAsync(cancellationToken);
             return Ok(version);
         }
@@ -75,25 +90,43 @@ public class SyncController(
     {
         try
         {
-            var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
-            var changeSet = await provider.GetChangesAsync(storeId, syncDirection: SyncDirection.DownloadOnly, cancellationToken: cancellationToken);
+            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+            var dataStoreId = endpoint.DataStoreConfiguration!.DataStoreId;
 
-            logger.LogInformation("GetBulkChangeSet(Endpoint={EndpointId}, StoreId={StoreId}) -> (Source={SourceAnchor} Target={TargetAnchor} Items={ItemsCount})",
-                endpointId, storeId, changeSet.SourceAnchor, changeSet.TargetAnchor, changeSet.Items.Count);
+            var session = await syncSessionService.StartAsync(dataStoreId, cancellationToken);
+            var sessionLogger = new SyncSessionLogger(logger, context, session.Id);
 
-            var sessionId = Guid.NewGuid();
-            memoryCache.Set(sessionId, new CachedSyncChangeSet { ChangeSet = changeSet });
-
-            return Ok(new BulkSyncChangeSet
+            try
             {
-                SessionId = sessionId,
-                TotalChanges = changeSet.Items.Count,
-                SourceAnchor = changeSet.SourceAnchor,
-                TargetAnchor = changeSet.TargetAnchor,
-                ChangesByTable = changeSet.Items
-                    .GroupBy(i => i.TableName)
-                    .ToDictionary(g => g.Key, g => g.Count())
-            });
+                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
+                var changeSet = await provider.GetChangesAsync(storeId, syncDirection: SyncDirection.DownloadOnly, cancellationToken: cancellationToken);
+
+                logger.LogInformation("GetBulkChangeSet(Endpoint={EndpointId}, StoreId={StoreId}) -> (Source={SourceAnchor} Target={TargetAnchor} Items={ItemsCount})",
+                    endpointId, storeId, changeSet.SourceAnchor, changeSet.TargetAnchor, changeSet.Items.Count);
+
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.CompleteAsync(session.Id, cancellationToken);
+
+                var cacheSessionId = Guid.NewGuid();
+                memoryCache.Set(cacheSessionId, new CachedSyncChangeSet { ChangeSet = changeSet });
+
+                return Ok(new BulkSyncChangeSet
+                {
+                    SessionId = cacheSessionId,
+                    TotalChanges = changeSet.Items.Count,
+                    SourceAnchor = changeSet.SourceAnchor,
+                    TargetAnchor = changeSet.TargetAnchor,
+                    ChangesByTable = changeSet.Items
+                        .GroupBy(i => i.TableName)
+                        .ToDictionary(g => g.Key, g => g.Count())
+                });
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException)
+            {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(session.Id, ex.Message, cancellationToken);
+                throw;
+            }
         }
         catch (KeyNotFoundException)
         {
@@ -149,13 +182,21 @@ public class SyncController(
     [HttpPost("changes-bulk-begin")]
     public async Task<ActionResult> BeginApplyBulkChanges(Guid endpointId, [FromBody] BulkSyncChangeSet bulkChangeSet, CancellationToken cancellationToken)
     {
-        // Validate that the endpoint exists
-        var exists = await context.Endpoints.AnyAsync(e => e.Id == endpointId, cancellationToken);
-        if (!exists)
+        var endpoint = await context.Endpoints
+            .Include(e => e.DataStoreConfiguration)
+            .FirstOrDefaultAsync(e => e.Id == endpointId, cancellationToken);
+
+        if (endpoint?.DataStoreConfiguration is null)
             return NotFound();
 
+        var session = await syncSessionService.StartAsync(endpoint.DataStoreConfiguration.DataStoreId, cancellationToken);
+
         var changeSet = new SyncChangeSet(bulkChangeSet.SourceAnchor, bulkChangeSet.TargetAnchor, new List<SyncItem>());
-        memoryCache.Set(bulkChangeSet.SessionId, changeSet);
+        memoryCache.Set(bulkChangeSet.SessionId, new CachedUploadSession
+        {
+            ChangeSet = changeSet,
+            SyncSessionId = session.Id
+        });
 
         return Ok();
     }
@@ -163,9 +204,9 @@ public class SyncController(
     [HttpPost("changes-bulk-item")]
     public ActionResult ApplyBulkChangesItem([FromBody] BulkChangeSetUploadItem bulkUploadItem)
     {
-        if (memoryCache.TryGetValue(bulkUploadItem.SessionId, out var obj) && obj is SyncChangeSet changeSet)
+        if (memoryCache.TryGetValue(bulkUploadItem.SessionId, out var obj) && obj is CachedUploadSession cached)
         {
-            ((List<SyncItem>)changeSet.Items).AddRange(bulkUploadItem.Items);
+            ((List<SyncItem>)cached.ChangeSet.Items).AddRange(bulkUploadItem.Items);
             return Ok();
         }
 
@@ -181,9 +222,9 @@ public class SyncController(
         if (bulkUploadItem is null)
             return BadRequest();
 
-        if (memoryCache.TryGetValue(bulkUploadItem.SessionId, out var obj) && obj is SyncChangeSet changeSet)
+        if (memoryCache.TryGetValue(bulkUploadItem.SessionId, out var obj) && obj is CachedUploadSession cached)
         {
-            ((List<SyncItem>)changeSet.Items).AddRange(bulkUploadItem.Items);
+            ((List<SyncItem>)cached.ChangeSet.Items).AddRange(bulkUploadItem.Items);
             return Ok();
         }
 
@@ -193,8 +234,10 @@ public class SyncController(
     [HttpPost("changes-bulk-complete/{sessionId:guid}")]
     public async Task<ActionResult<SyncAnchor>> CompleteApplyBulkChanges(Guid endpointId, Guid sessionId, CancellationToken cancellationToken)
     {
-        if (memoryCache.TryGetValue(sessionId, out var obj) && obj is SyncChangeSet changeSet)
+        if (memoryCache.TryGetValue(sessionId, out var obj) && obj is CachedUploadSession cached)
         {
+            var changeSet = cached.ChangeSet;
+
             // Convert JSON elements to .NET objects
             foreach (var item in changeSet.Items)
             {
@@ -205,20 +248,34 @@ public class SyncController(
                 }
             }
 
+            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId);
+
             try
             {
-                var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
+                var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
                 var resAnchor = await provider.ApplyChangesAsync(changeSet, updateResultion: ConflictResolution.ForceWrite, deleteResolution: ConflictResolution.Skip);
 
                 memoryCache.Remove(sessionId);
 
                 logger.LogInformation("CompleteApplyBulkChanges(Endpoint={EndpointId}) => {Anchor}", endpointId, resAnchor);
 
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.CompleteAsync(cached.SyncSessionId, cancellationToken);
+
                 return Ok(resAnchor);
             }
             catch (KeyNotFoundException)
             {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
                 return NotFound();
+            }
+            catch (Exception ex)
+            {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                throw;
             }
         }
 
@@ -228,22 +285,37 @@ public class SyncController(
     [HttpPost("changes-bulk-complete-binary/{sessionId:guid}")]
     public async Task<ActionResult<SyncAnchor>> CompleteApplyBulkChangesBinary(Guid endpointId, Guid sessionId, CancellationToken cancellationToken)
     {
-        if (memoryCache.TryGetValue(sessionId, out var obj) && obj is SyncChangeSet changeSet)
+        if (memoryCache.TryGetValue(sessionId, out var obj) && obj is CachedUploadSession cached)
         {
+            var changeSet = cached.ChangeSet;
+            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId);
+
             try
             {
-                var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
+                var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
                 var resAnchor = await provider.ApplyChangesAsync(changeSet, updateResultion: ConflictResolution.ForceWrite, deleteResolution: ConflictResolution.Skip);
 
                 memoryCache.Remove(sessionId);
 
                 logger.LogInformation("CompleteApplyBulkChangesBinary(Endpoint={EndpointId}) => {Anchor}", endpointId, resAnchor);
 
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.CompleteAsync(cached.SyncSessionId, cancellationToken);
+
                 return Ok(resAnchor);
             }
             catch (KeyNotFoundException)
             {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
                 return NotFound();
+            }
+            catch (Exception ex)
+            {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                throw;
             }
         }
 
@@ -255,7 +327,8 @@ public class SyncController(
     {
         try
         {
-            var provider = await GetSyncProviderAsync(endpointId, cancellationToken);
+            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
 
             logger.LogInformation("SaveVersionForStore(Endpoint={EndpointId}, StoreId={StoreId}, Version={Version})", endpointId, storeId, version);
 
