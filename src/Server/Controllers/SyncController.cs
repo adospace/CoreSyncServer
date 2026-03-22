@@ -1,6 +1,7 @@
 using CoreSync;
 using CoreSync.Http;
 using CoreSyncServer.Data;
+using CoreSyncServer.Filters;
 using CoreSyncServer.Services;
 using CoreSyncServer.Services.Implementation;
 using MessagePack;
@@ -13,6 +14,7 @@ namespace CoreSyncServer.Controllers;
 
 [ApiController]
 [Route("api/sync/{endpointId:guid}")]
+[ServiceFilter(typeof(SyncEndpointAuthFilter))]
 public class SyncController(
     ApplicationDbContext context,
     ISyncProviderFactory syncProviderFactory,
@@ -30,6 +32,29 @@ public class SyncController(
     {
         public required SyncChangeSet ChangeSet { get; set; }
         public int SyncSessionId { get; set; }
+    }
+
+    private static SyncFilterParameter[]? GetSyncFilterParameters(HttpContext httpContext)
+    {
+        if (httpContext.Items[SyncEndpointAuthFilter.AuthResultKey] is not SyncAuthResult authResult)
+            return null;
+
+        List<SyncFilterParameter> parameters = [];
+
+        if (authResult.UserId is not null)
+            parameters.Add(new SyncFilterParameter("@UserId", authResult.UserId));
+
+        if (authResult.UserName is not null)
+            parameters.Add(new SyncFilterParameter("@UserName", authResult.UserName));
+
+        foreach (var claim in authResult.Claims)
+        {
+            var paramName = $"@Claim_{claim.Type.Replace('/', '_').Replace('.', '_')}";
+            if (parameters.All(p => p.Name != paramName))
+                parameters.Add(new SyncFilterParameter(paramName, claim.Value));
+        }
+
+        return parameters.Count > 0 ? parameters.ToArray() : null;
     }
 
     private async Task<Data.Endpoint> GetEndpointAsync(Guid endpointId, CancellationToken cancellationToken)
@@ -99,7 +124,8 @@ public class SyncController(
             try
             {
                 var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
-                var changeSet = await provider.GetChangesAsync(storeId, syncDirection: SyncDirection.DownloadOnly, cancellationToken: cancellationToken);
+                var filterParams = GetSyncFilterParameters(HttpContext);
+                var changeSet = await provider.GetChangesAsync(storeId, syncFilterParameters: filterParams, syncDirection: SyncDirection.DownloadOnly, cancellationToken: cancellationToken);
 
                 logger.LogInformation("GetBulkChangeSet(Endpoint={EndpointId}, StoreId={StoreId}) -> (Source={SourceAnchor} Target={TargetAnchor} Items={ItemsCount})",
                     endpointId, storeId, changeSet.SourceAnchor, changeSet.TargetAnchor, changeSet.Items.Count);

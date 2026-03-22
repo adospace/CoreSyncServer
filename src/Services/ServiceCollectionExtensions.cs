@@ -58,6 +58,9 @@ namespace CoreSyncServer.Services
             services.AddSingleton<MaintenanceTask, SyncSessionMaintenanceTask>();
             services.AddSingleton<IMaintenanceService, MaintenanceService>();
 
+            services.AddHttpClient("jwks");
+            services.AddScoped<ISyncEndpointAuthService, SyncEndpointAuthService>();
+
             return services;
         }
     }

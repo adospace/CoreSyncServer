@@ -1,6 +1,7 @@
 using CoreSyncServer.Components;
 using CoreSyncServer.Components.Account;
 using CoreSyncServer.Data;
+using CoreSyncServer.Filters;
 using CoreSyncServer.Server.Services;
 using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -59,6 +60,8 @@ public static class CoreSyncServerBuilderExtensions
 
         builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
         builder.Services.AddScoped<INotificationService, SmtpNotificationService>();
+
+        builder.Services.AddScoped<SyncEndpointAuthFilter>();
 
         builder.Services.AddSingleton<MigrationComplete>();
         builder.Services.AddHostedService<MigrationHostedService>();
