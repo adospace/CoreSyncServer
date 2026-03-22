@@ -132,6 +132,57 @@ public class DataStoreConfigurationsController(
         return NoContent();
     }
 
+    [HttpPost("{id}/clone")]
+    public async Task<ActionResult<ConfigurationDetailDto>> Clone(int id)
+    {
+        var original = await context.DataStoreConfigurations
+            .Include(c => c.DataStore)
+            .Include(c => c.TableConfigurations)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (original is null) return NotFound();
+
+        var clone = new DataStoreConfiguration
+        {
+            Name = $"{original.Name} (Copy)",
+            Description = original.Description,
+            Version = original.Version,
+            DataStoreId = original.DataStoreId
+        };
+
+        foreach (var t in original.TableConfigurations)
+        {
+            clone.TableConfigurations.Add(new DataStoreTableConfiguration
+            {
+                Name = t.Name,
+                Schema = t.Schema,
+                SyncMode = t.SyncMode,
+                Sort = t.Sort,
+                SkipInitialSnapshot = t.SkipInitialSnapshot,
+                SelectIncrementalQuery = t.SelectIncrementalQuery,
+                CustomSnapshotQuery = t.CustomSnapshotQuery,
+                SkipColumns = t.SkipColumns,
+                SkipColumnsOnInsertOrUpdate = t.SkipColumnsOnInsertOrUpdate,
+                IdentityInsert = t.IdentityInsert,
+                ForceReloadInsertedRecords = t.ForceReloadInsertedRecords
+            });
+        }
+
+        context.DataStoreConfigurations.Add(clone);
+        await context.SaveChangesAsync();
+
+        return Ok(new ConfigurationDetailDto(
+            clone.Id,
+            clone.Name,
+            clone.Description,
+            clone.Version,
+            clone.DataStoreId,
+            original.DataStore!.Name,
+            (int)original.DataStore.Type,
+            false,
+            false));
+    }
+
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(int id)
     {

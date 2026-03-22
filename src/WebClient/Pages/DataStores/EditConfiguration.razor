@@ -41,6 +41,11 @@ else
                         <span class="i-lucide-trash-2 size-4"></span>
                         Delete
                     </button>
+                    <button @onclick="CloneConfiguration" disabled="@_isCloning"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                        <span class="i-lucide-copy size-4"></span>
+                        @(_isCloning ? "Cloning..." : "Clone")
+                    </button>
                     <div class="h-8 w-px bg-gray-200"></div>
                     <button @onclick="SaveConfiguration" disabled="@(!HasUnsavedChanges || _isSaving)"
                             class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
@@ -543,6 +548,7 @@ else
     private string _savedDescription = "";
     private int _savedVersion;
     private bool _isSaving;
+    private bool _isCloning;
     private List<string> _errorMessages = [];
 
     // Unsaved changes
@@ -751,6 +757,38 @@ else
         finally
         {
             _isSaving = false;
+        }
+    }
+
+    // Clone configuration
+    private async Task CloneConfiguration()
+    {
+        _isCloning = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsync($"api/datastoreconfigurations/{ConfigId}/clone", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var cloned = await response.Content.ReadFromJsonAsync<ConfigurationDetailDto>();
+                if (cloned is not null)
+                    NavigationManager.NavigateTo($"/data-stores/configurations/edit/{cloned.Id}");
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isCloning = false;
         }
     }
 
