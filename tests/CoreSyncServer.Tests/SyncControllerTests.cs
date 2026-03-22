@@ -77,7 +77,8 @@ public class SyncControllerTests : IClassFixture<InMemoryWebApplicationFactory>,
         {
             Id = Guid.NewGuid(),
             Name = "Test Endpoint",
-            DataStoreConfigurationId = config.Id
+            DataStoreConfigurationId = config.Id,
+            IsPublished = true
         };
         db.Endpoints.Add(endpoint);
         await db.SaveChangesAsync();
