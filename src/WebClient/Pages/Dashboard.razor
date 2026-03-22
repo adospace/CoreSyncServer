@@ -1,8 +1,9 @@
 @page "/dashboard"
-@layout DashboardLayout
-@using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
+@inherits InteractivePage
+@layout DashboardLayout
 @rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -18,76 +19,163 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500">Total Users</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1">1,284</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">@(_stats?.TotalUsers.ToString("N0") ?? "—")</p>
                 </div>
                 <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
                     <span class="i-lucide-users size-5 text-dusk-blue-500"></span>
                 </div>
             </div>
-            <p class="text-xs text-dusk-blue-500 mt-2 font-medium">+12% from last month</p>
         </div>
 
         <div class="bg-white rounded border border-gray-100 p-4">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500">Active Sessions</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1">342</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">@(_stats?.ActiveSessions.ToString("N0") ?? "—")</p>
                 </div>
                 <div class="w-10 h-10 rounded-lg bg-dusty-denim-900 flex items-center justify-center">
                     <span class="i-lucide-bar-chart-2 size-5 text-dusty-denim-500"></span>
                 </div>
             </div>
-            <p class="text-xs text-dusty-denim-500 mt-2 font-medium">+5% from last hour</p>
         </div>
 
         <div class="bg-white rounded border border-gray-100 p-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium text-gray-500">Sync Events</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1">8,491</p>
+                    <p class="text-sm font-medium text-gray-500">Sync Events Today</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">@(_stats?.SyncEventsToday.ToString("N0") ?? "—")</p>
                 </div>
                 <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
                     <span class="i-lucide-file-text size-5 text-ink-black-500"></span>
                 </div>
             </div>
-            <p class="text-xs text-ink-black-500 mt-2 font-medium">+18% from yesterday</p>
         </div>
 
         <div class="bg-white rounded border border-gray-100 p-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium text-gray-500">Error Rate</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1">0.3%</p>
+                    <p class="text-sm font-medium text-gray-500">Errors Today</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">@(_stats?.ErrorCountToday.ToString("N0") ?? "—")</p>
                 </div>
                 <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
-                    <span class="i-lucide-bar-chart-2 size-5 text-ink-black-500"></span>
+                    <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
                 </div>
             </div>
-            <p class="text-xs text-dusk-blue-500 mt-2 font-medium">-2% from last week</p>
         </div>
     </div>
 
-    @* Content area placeholder *@
+    @* Content area *@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div class="lg:col-span-2 bg-white rounded border border-gray-100 p-4">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Activity Overview</h2>
-            <div class="h-64 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-                <p>Chart placeholder</p>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-900">Activity Overview</h2>
+                <select @bind="_activityDays" @bind:after="LoadActivity"
+                        class="px-2 py-1 border border-gray-200 rounded text-xs text-gray-600 outline-none focus:ring-1 focus:ring-dusk-blue-500">
+                    <option value="7">Last 7 days</option>
+                    <option value="14">Last 14 days</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                </select>
             </div>
+            @if (_activityDataPoints is null)
+            {
+                <div class="h-64 flex items-center justify-center text-gray-400">
+                    <span class="i-lucide-loader-2 size-5 animate-spin mr-2"></span>
+                    Loading activity data...
+                </div>
+            }
+            else
+            {
+                <ActivityChart DataPoints="@_activityDataPoints" />
+            }
         </div>
 
         <div class="bg-white rounded border border-gray-100 p-4">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Events</h2>
-            <div class="space-y-4">
-                @for (int i = 0; i < 5; i++)
-                {
-                    <div class="flex items-center gap-3 text-sm">
-                        <div class="w-2 h-2 rounded-full bg-dusk-blue-500 shrink-0"></div>
-                        <span class="text-gray-600">Sync event completed</span>
-                        <span class="text-gray-400 ml-auto text-xs">@(i + 1)m ago</span>
-                    </div>
-                }
-            </div>
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Sessions</h2>
+            @if (_recentSessions is null)
+            {
+                <div class="flex items-center justify-center text-gray-400 py-8">
+                    <span class="i-lucide-loader-2 size-5 animate-spin mr-2"></span>
+                    Loading...
+                </div>
+            }
+            else if (_recentSessions.Count == 0)
+            {
+                <p class="text-sm text-gray-400 py-8 text-center">No recent sessions.</p>
+            }
+            else
+            {
+                <div class="space-y-3">
+                    @foreach (var session in _recentSessions)
+                    {
+                        <a href="/sync-sessions/@session.Id" class="flex items-center gap-3 text-sm hover:bg-gray-50 -mx-2 px-2 py-1.5 rounded transition-colors">
+                            <div class="w-2 h-2 rounded-full shrink-0 @GetStatusDotClass(session.Status)"></div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-gray-700 truncate block">@session.DataStoreName</span>
+                            </div>
+                            <span class="text-gray-400 text-xs whitespace-nowrap">@FormatRelativeTime(session.StartTime)</span>
+                        </a>
+                    }
+                </div>
+            }
         </div>
     </div>
 </div>
+
+@code {
+    private DashboardStatsDto? _stats;
+    private List<ActivityChart.DataPoint>? _activityDataPoints;
+    private List<RecentSessionDto>? _recentSessions;
+    private int _activityDays = 30;
+
+    private record DashboardStatsDto(int TotalUsers, int ActiveSessions, int SyncEventsToday, int ErrorCountToday);
+    private record ActivityDataPointDto(DateTime Date, int Completed, int Errors);
+    private record DashboardActivityDto(List<ActivityDataPointDto> DataPoints);
+    private record RecentSessionDto(int Id, DateTime StartTime, int Status, string DataStoreName);
+    private record RecentSessionsResult(List<RecentSessionDto> Items, int TotalCount);
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        await Task.WhenAll(LoadStats(), LoadActivity(), LoadRecentSessions());
+    }
+
+    private async Task LoadStats()
+    {
+        _stats = await Http.GetFromJsonAsync<DashboardStatsDto>("api/dashboard/stats");
+    }
+
+    private async Task LoadActivity()
+    {
+        _activityDataPoints = null;
+        StateHasChanged();
+
+        var result = await Http.GetFromJsonAsync<DashboardActivityDto>($"api/dashboard/activity?days={_activityDays}");
+        _activityDataPoints = result?.DataPoints
+            .Select(d => new ActivityChart.DataPoint(d.Date, d.Completed, d.Errors))
+            .ToList() ?? [];
+    }
+
+    private async Task LoadRecentSessions()
+    {
+        var result = await Http.GetFromJsonAsync<RecentSessionsResult>("api/sync-sessions?page=0&pageSize=8");
+        _recentSessions = result?.Items ?? [];
+    }
+
+    private static string GetStatusDotClass(int status) => status switch
+    {
+        0 => "bg-blue-500",
+        1 => "bg-green-500",
+        2 => "bg-red-500",
+        _ => "bg-gray-400"
+    };
+
+    private static string FormatRelativeTime(DateTime utcTime)
+    {
+        var elapsed = DateTime.UtcNow - utcTime;
+        if (elapsed.TotalMinutes < 1) return "just now";
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalHours < 24) return $"{(int)elapsed.TotalHours}h ago";
+        if (elapsed.TotalDays < 7) return $"{(int)elapsed.TotalDays}d ago";
+        return utcTime.ToLocalTime().ToString("MMM dd");
+    }
+}
