@@ -51,8 +51,11 @@ public static class CoreSyncServerBuilderExtensions
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-        builder.Services.AddCoreSyncData<TContext>(options =>
-            options.UseNpgsql(connectionString, b => b.MigrationsAssembly("CoreSyncServer")));
+
+        builder.Services.AddCoreSyncServerServices<TContext>(
+            builder.Configuration,
+            options => options.UseNpgsql(connectionString, b => b.MigrationsAssembly("CoreSyncServer")));
+
         builder.Services.AddMemoryCache();
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
@@ -63,14 +66,7 @@ public static class CoreSyncServerBuilderExtensions
 
         builder.Services.AddScoped<SyncEndpointAuthFilter>();
 
-        builder.Services.AddSingleton<MigrationComplete>();
         builder.Services.AddHostedService<MigrationHostedService>();
-
-        builder.Services.Configure<MonitorSettings>(builder.Configuration.GetSection("Monitor"));
-        builder.Services.AddHostedService<CoreSyncServer.Server.Services.MonitorHostedService>();
-
-        builder.Services.Configure<CoreSyncServer.Services.MaintenanceSettings>(builder.Configuration.GetSection("Maintenance"));
-        builder.Services.AddHostedService<CoreSyncServer.Server.Services.MaintenanceHostedService>();
 
         builder.Services.AddScoped(sp =>
         {

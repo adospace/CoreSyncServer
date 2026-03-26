@@ -1,3 +1,4 @@
+using CoreSyncServer.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreSyncServer.Data;

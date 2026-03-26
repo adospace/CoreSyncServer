@@ -1,7 +1,9 @@
 using CoreSyncServer.Data;
+using CoreSyncServer.Filters;
 using CoreSyncServer.Services.Implementation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -13,17 +15,19 @@ namespace CoreSyncServer.Services
         /// Registers ApplicationDbContext and ASP.NET Core Identity services.
         /// The caller provides the DbContext configuration (e.g. UseNpgsql, UseSqlServer).
         /// </summary>
-        public static IServiceCollection AddCoreSyncData(
+        public static IServiceCollection AddCoreSyncServerServices(
             this IServiceCollection services,
+            IConfiguration configuration,
             Action<DbContextOptionsBuilder> configureDbContext)
-            => AddCoreSyncData<ApplicationDbContext>(services, configureDbContext);
+            => AddCoreSyncServerServices<ApplicationDbContext>(services, configuration, configureDbContext);
 
         /// <summary>
         /// Registers a derived DbContext (e.g. a multi-tenant CloudDbContext) as the
         /// ApplicationDbContext implementation, along with Identity and core services.
         /// </summary>
-        public static IServiceCollection AddCoreSyncData<TContext>(
+        public static IServiceCollection AddCoreSyncServerServices<TContext>(
             this IServiceCollection services,
+            IConfiguration configuration,
             Action<DbContextOptionsBuilder> configureDbContext)
             where TContext : ApplicationDbContext
         {
@@ -60,6 +64,17 @@ namespace CoreSyncServer.Services
 
             services.AddHttpClient("jwks");
             services.AddScoped<ISyncEndpointAuthService, SyncEndpointAuthService>();
+
+            services.AddScoped<SyncEndpointAuthFilter>();
+
+            services.AddSingleton<MigrationComplete>();
+            
+            services.Configure<MonitorSettings>(configuration.GetRequiredSection("Monitor"));
+            services.AddHostedService<MonitorHostedService>();
+
+            services.Configure<MaintenanceSettings>(configuration.GetRequiredSection("Maintenance"));
+            services.AddHostedService<MaintenanceHostedService>();
+
 
             return services;
         }

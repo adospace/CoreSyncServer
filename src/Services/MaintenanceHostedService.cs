@@ -1,21 +1,20 @@
-using CoreSyncServer.Data;
 using CoreSyncServer.Services;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CoreSyncServer.Server.Services;
+namespace CoreSyncServer.Services;
 
 public class MaintenanceHostedService(
     IMaintenanceService maintenanceService,
     MigrationComplete migrationComplete,
-    IOptions<MaintenanceSettings> options,
     ILogger<MaintenanceHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await migrationComplete.Task.WaitAsync(stoppingToken);
 
-        var intervalMinutes = options.Value.IntervalMinutes;
-        logger.LogInformation("Maintenance service started. Interval: {Interval} minute(s).", intervalMinutes);
+        logger.LogInformation("Maintenance service started.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -28,7 +27,7 @@ public class MaintenanceHostedService(
                 logger.LogError(ex, "Maintenance service encountered an error.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), stoppingToken);
+            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
     }
 }

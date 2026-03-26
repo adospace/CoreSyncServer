@@ -1,4 +1,4 @@
-namespace CoreSyncServer.Data;
+namespace CoreSyncServer.Services;
 
 public class MigrationComplete
 {

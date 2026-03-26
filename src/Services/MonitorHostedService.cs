@@ -1,8 +1,9 @@
-using CoreSyncServer.Data;
 using CoreSyncServer.Services;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CoreSyncServer.Server.Services;
+namespace CoreSyncServer.Services;
 
 public class MonitorHostedService(
     IMonitorService monitorService,
@@ -31,4 +32,9 @@ public class MonitorHostedService(
             await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), stoppingToken);
         }
     }
+}
+
+public class MonitorSettings
+{
+    public int IntervalMinutes { get; set; } = 5;
 }
