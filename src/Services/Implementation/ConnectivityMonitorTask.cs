@@ -31,8 +31,8 @@ public class ConnectivityMonitorTask(IEnumerable<ISchemaReader> schemaReaders, I
         var connectionString = dataStore switch
         {
             SqliteDataStore sqlite => $"Data Source={sqlite.FilePath}",
-            SqlServerDataStore sqlServer => sqlServer.ConnectionString,
-            PostgreSqlDataStore pg => pg.ConnectionString,
+            SqlServerDataStore sqlServer => sqlServer.GetResolvedConnectionString(),
+            PostgreSqlDataStore pg => pg.GetResolvedConnectionString(),
             _ => null
         };
 

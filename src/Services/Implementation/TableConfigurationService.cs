@@ -303,8 +303,8 @@ public class TableConfigurationService(
         var connectionString = dataStore switch
         {
             SqliteDataStore sqlite => $"Data Source={sqlite.FilePath}",
-            SqlServerDataStore sqlServer => sqlServer.ConnectionString,
-            PostgreSqlDataStore pg => pg.ConnectionString,
+            SqlServerDataStore sqlServer => sqlServer.GetResolvedConnectionString(),
+            PostgreSqlDataStore pg => pg.GetResolvedConnectionString(),
             _ => null
         };
 

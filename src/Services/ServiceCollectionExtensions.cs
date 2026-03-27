@@ -38,6 +38,7 @@ namespace CoreSyncServer.Services
                     options.SignIn.RequireConfirmedAccount = true;
                     options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
                 })
+                .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddSignInManager()
                 .AddDefaultTokenProviders();

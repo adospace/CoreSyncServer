@@ -15,6 +15,18 @@ public enum SqlServerDataStoreTrackingMode
 
 public abstract class DataStore
 {
+    protected static string ResolveConnectionString(string connectionString)
+    {
+        if (connectionString.StartsWith("ENV=", StringComparison.OrdinalIgnoreCase))
+        {
+            var envVarName = connectionString[4..];
+            return Environment.GetEnvironmentVariable(envVarName)
+                ?? throw new InvalidOperationException($"Environment variable '{envVarName}' is not set.");
+        }
+
+        return connectionString;
+    }
+
     public int Id { get; set; }
 
     public required string Name { get; set; }
@@ -45,10 +57,14 @@ public class SqlServerDataStore : DataStore
 {
     public required string ConnectionString { get; set; }
 
+    public string GetResolvedConnectionString() => ResolveConnectionString(ConnectionString);
+
     public SqlServerDataStoreTrackingMode TrackingMode { get; set; }
 }
 
 public class PostgreSqlDataStore : DataStore
 {
     public required string ConnectionString { get; set; }
+
+    public string GetResolvedConnectionString() => ResolveConnectionString(ConnectionString);
 }

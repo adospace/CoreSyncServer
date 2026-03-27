@@ -2,6 +2,7 @@ using CoreSyncServer.Components;
 using CoreSyncServer.Components.Account;
 using CoreSyncServer.Data;
 using CoreSyncServer.Filters;
+using CoreSyncServer.Server.Data;
 using CoreSyncServer.Server.Services;
 using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -19,7 +20,7 @@ public static class CoreSyncServerBuilderExtensions
     /// </summary>
     public static WebApplicationBuilder AddCoreSyncServer(this WebApplicationBuilder builder)
     {
-        return builder.AddCoreSyncServer<ApplicationDbContext>();
+        return builder.AddCoreSyncServer<CoreSyncServerDbContext>();
     }
 
     /// <summary>

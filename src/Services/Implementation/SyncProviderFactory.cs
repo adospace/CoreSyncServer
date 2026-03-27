@@ -54,7 +54,7 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 
     private ISyncProvider CreateSqlServerCTProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
-        var builder = new SqlServerCTSyncConfigurationBuilder(dataStore.ConnectionString);
+        var builder = new SqlServerCTSyncConfigurationBuilder(dataStore.GetResolvedConnectionString());
 
         foreach (var table in tables)
         {
@@ -82,7 +82,7 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 
     private ISyncProvider CreateSqlServerProvider(SqlServerDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
-        var builder = new SqlSyncConfigurationBuilder(dataStore.ConnectionString);
+        var builder = new SqlSyncConfigurationBuilder(dataStore.GetResolvedConnectionString());
 
         foreach (var table in tables)
         {
@@ -113,7 +113,7 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 
     private ISyncProvider CreatePostgresProvider(PostgreSqlDataStore dataStore, List<DataStoreTableConfiguration> tables, ISyncLogger syncLogger)
     {
-        var builder = new PostgreSQLSyncConfigurationBuilder(dataStore.ConnectionString);
+        var builder = new PostgreSQLSyncConfigurationBuilder(dataStore.GetResolvedConnectionString());
 
         foreach (var table in tables)
         {
