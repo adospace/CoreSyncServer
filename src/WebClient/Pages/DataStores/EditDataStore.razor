@@ -670,6 +670,17 @@ else
     </div>
 }
 
+@if (_provisionErrorMessages.Count > 0 && !_showRemoveProvisionDialog)
+{
+    <div class="fixed bottom-4 right-4 z-50 p-4 bg-red-100 border border-red-300 rounded-lg shadow-lg flex items-center gap-2">
+        <span class="i-lucide-alert-circle size-5 text-red-600"></span>
+        <span class="text-sm text-red-800">@string.Join(" ", _provisionErrorMessages)</span>
+        <button @onclick="() => _provisionErrorMessages = []" class="ml-2 text-red-600 hover:text-red-800">
+            <span class="i-lucide-x size-4"></span>
+        </button>
+    </div>
+}
+
 @* Unsaved changes dialog *@
 @if (_showUnsavedDialog)
 {

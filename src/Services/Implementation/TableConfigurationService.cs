@@ -321,6 +321,39 @@ public class TableConfigurationService(
     private static IReadOnlyList<TableSchema> FilterChangeTrackingTables(IReadOnlyList<TableSchema> tables) =>
         tables.Where(t => !t.Name.StartsWith(ChangeTrackingTablePrefix, StringComparison.OrdinalIgnoreCase)).ToList();
 
+    public async Task<DiscoverTablesResult> DiscoverAsync(int configurationId, CancellationToken cancellationToken = default)
+    {
+        var config = await context.DataStoreConfigurations
+            .Include(c => c.DataStore)
+            .FirstOrDefaultAsync(c => c.Id == configurationId, cancellationToken);
+
+        if (config is null)
+            return DiscoverTablesResult.NotFound();
+
+        var (reader, connectionString, error) = ResolveSchemaReader(config.DataStore!);
+        if (error is not null)
+            return DiscoverTablesResult.Failure(error);
+
+        IReadOnlyList<TableSchema> schemaTables;
+        try
+        {
+            schemaTables = await reader!.GetTablesAsync(connectionString!, cancellationToken);
+        }
+        catch (DbException ex)
+        {
+            return DiscoverTablesResult.Failure($"Unable to connect to the database: {ex.Message}");
+        }
+
+        schemaTables = FilterChangeTrackingTables(schemaTables);
+
+        var tables = schemaTables
+            .OrderBy(t => t.Schema).ThenBy(t => t.Name)
+            .Select(t => new DiscoveredTable(t.Name, t.Schema))
+            .ToList();
+
+        return DiscoverTablesResult.Ok(tables);
+    }
+
     private async Task<IReadOnlyList<DataStoreTableConfiguration>> LoadTablesAsync(int configurationId, CancellationToken cancellationToken) =>
         await context.DataStoreTableConfigurations
             .Where(t => t.DataStoreConfigurationId == configurationId)

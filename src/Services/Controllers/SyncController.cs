@@ -5,6 +5,7 @@ using CoreSyncServer.Filters;
 using CoreSyncServer.Services;
 using CoreSyncServer.Services.Implementation;
 using MessagePack;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ using System.Text.Json;
 namespace CoreSyncServer.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/sync/{endpointId:guid}")]
 [ServiceFilter(typeof(SyncEndpointAuthFilter))]
 public class SyncController(

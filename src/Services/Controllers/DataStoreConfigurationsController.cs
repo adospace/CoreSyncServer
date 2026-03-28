@@ -315,6 +315,19 @@ public class DataStoreConfigurationsController(
 
     // Scaffold & Sort
 
+    public record DiscoveredTableDto(string Name, string? Schema);
+
+    [HttpGet("{id}/tables/discover")]
+    public async Task<ActionResult<List<DiscoveredTableDto>>> DiscoverTables(int id, CancellationToken cancellationToken)
+    {
+        var result = await tableConfigurationService.DiscoverAsync(id, cancellationToken);
+
+        if (!result.Success)
+            return result.Error == "Configuration not found." ? NotFound() : BadRequest(new[] { result.Error });
+
+        return Ok(result.Tables.Select(t => new DiscoveredTableDto(t.Name, t.Schema)).ToList());
+    }
+
     [HttpPost("{id}/tables/scaffold")]
     public async Task<ActionResult<List<TableConfigDto>>> ScaffoldTables(int id)
     {
@@ -341,6 +354,80 @@ public class DataStoreConfigurationsController(
         var result = await tableConfigurationService.SortAsync(id);
         return ToTableResponse(result);
     }
+
+    public record ImportTableRequest(
+        string Name, string? Schema, string? SyncDirection, int? SyncMode,
+        bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
+        string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert,
+        bool ForceReloadInsertedRecords);
+
+    public record ImportConfigurationRequest(ImportTableRequest[] Tables);
+
+    [HttpPost("{id}/tables/import")]
+    public async Task<ActionResult<List<TableConfigDto>>> ImportTables(int id, [FromBody] ImportConfigurationRequest request)
+    {
+        if (request.Tables is null || request.Tables.Length == 0)
+            return BadRequest(new[] { "No tables to import." });
+
+        if (await HasPublishedEndpoint(id))
+            return BadRequest(new[] { "Cannot modify table configurations while an endpoint is published." });
+
+        var config = await context.DataStoreConfigurations.FindAsync(id);
+        if (config is null) return NotFound();
+
+        // Remove all existing tables
+        var existingTables = await context.DataStoreTableConfigurations
+            .Where(t => t.DataStoreConfigurationId == id)
+            .ToListAsync();
+        context.DataStoreTableConfigurations.RemoveRange(existingTables);
+
+        // Add imported tables
+        var sort = 0;
+        foreach (var t in request.Tables)
+        {
+            if (string.IsNullOrWhiteSpace(t.Name))
+                return BadRequest(new[] { "Each table must have a name." });
+
+            var syncMode = t.SyncMode ?? ParseSyncDirection(t.SyncDirection);
+
+            context.DataStoreTableConfigurations.Add(new DataStoreTableConfiguration
+            {
+                Name = t.Name.Trim(),
+                Schema = t.Schema?.Trim(),
+                SyncMode = (DataStoreTableConfigurationSyncMode)syncMode,
+                DataStoreConfigurationId = id,
+                Sort = sort++,
+                SkipInitialSnapshot = t.SkipInitialSnapshot,
+                SelectIncrementalQuery = t.SelectIncrementalQuery?.Trim(),
+                CustomSnapshotQuery = t.CustomSnapshotQuery?.Trim(),
+                SkipColumns = t.SkipColumns?.Trim(),
+                SkipColumnsOnInsertOrUpdate = t.SkipColumnsOnInsertOrUpdate?.Trim(),
+                IdentityInsert = (DataStoreTableConfigurationIdentityInsertMode)t.IdentityInsert,
+                ForceReloadInsertedRecords = t.ForceReloadInsertedRecords
+            });
+        }
+
+        await context.SaveChangesAsync();
+
+        var tables = await context.DataStoreTableConfigurations
+            .Where(t => t.DataStoreConfigurationId == id)
+            .OrderBy(t => t.Sort)
+            .Select(t => new TableConfigDto(t.Id, t.Name, t.Schema, (int)t.SyncMode, t.InError, t.Sort, t.Message,
+                t.SkipInitialSnapshot, t.SelectIncrementalQuery, t.CustomSnapshotQuery,
+                t.SkipColumns, t.SkipColumnsOnInsertOrUpdate, (int)t.IdentityInsert,
+                t.ForceReloadInsertedRecords))
+            .ToListAsync();
+
+        return Ok(tables);
+    }
+
+    private static int ParseSyncDirection(string? syncDirection) => syncDirection switch
+    {
+        "UploadOnly" => 1,
+        "DownloadOnly" => 2,
+        "NotTracked" => 3,
+        _ => 0 // UploadAndDownload
+    };
 
     private ActionResult<List<TableConfigDto>> ToTableResponse(TableConfigurationResult result)
     {

@@ -46,6 +46,13 @@ else
                         <span class="i-lucide-copy size-4"></span>
                         @(_isCloning ? "Cloning..." : "Clone")
                     </button>
+                    <label for="importFileInput"
+                           class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 cursor-pointer @(IsPublished ? "opacity-50 pointer-events-none" : "")"
+                           title="@(IsPublished ? "Cannot import while an endpoint is published" : "Import configuration from JSON")">
+                        <span class="i-lucide-upload size-4"></span>
+                        Import
+                    </label>
+                    <InputFile OnChange="OnImportFileSelected" accept=".json" id="importFileInput" class="hidden" />
                     <div class="h-8 w-px bg-gray-200"></div>
                     <button @onclick="SaveConfiguration" disabled="@(!HasUnsavedChanges || _isSaving)"
                             class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
@@ -118,12 +125,12 @@ else
                                     <span class="i-lucide-plus size-3.5"></span>
                                     Add Table
                                 </button>
-                                <button @onclick="ScaffoldTables" disabled="@_isScaffolding"
+                                <button @onclick="ScaffoldTables" disabled="@(_isScaffolding || HasUnsavedChanges)"
                                         class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
                                     <span class="i-lucide-database size-3.5"></span>
                                     @(_isScaffolding ? "Scaffolding..." : "Scaffold")
                                 </button>
-                                <button @onclick="SortTables" disabled="@_isSorting"
+                                <button @onclick="SortTables" disabled="@(_isSorting || HasUnsavedChanges)"
                                         class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm flex items-center gap-1.5 disabled:opacity-50">
                                     <span class="i-lucide-arrow-up-down size-3.5"></span>
                                     @(_isSorting ? "Sorting..." : "Sort")
@@ -332,24 +339,88 @@ else
             <div class="p-6">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
-                        <span class="i-lucide-table size-5 text-dusk-blue-500"></span>
+                        <span class="@(_isBulkEdit ? "i-lucide-pencil-ruler" : "i-lucide-table") size-5 text-dusk-blue-500"></span>
                     </div>
-                    <h2 class="text-lg font-semibold text-gray-900">@(_editingTable is null ? "Add Table Configuration" : "Edit Table Configuration")</h2>
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            @if (_isBulkEdit)
+                            {
+                                @($"Edit {_bulkEditTables.Count} Tables")
+                            }
+                            else
+                            {
+                                @(_editingTable is null ? "Add Table Configuration" : "Edit Table Configuration")
+                            }
+                        </h2>
+                        @if (_isBulkEdit)
+                        {
+                            <p class="text-sm text-gray-500 mt-0.5">
+                                @string.Join(", ", _bulkEditTables.Select(t => t.Name))
+                            </p>
+                        }
+                    </div>
                 </div>
 
                 <div class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                            <input type="text" @bind="_tableName" placeholder="Table name"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Schema</label>
-                            <input type="text" @bind="_tableSchema" placeholder="Optional schema (e.g. dbo)"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
-                        </div>
-                    </div>
+                    @if (!_isBulkEdit)
+                    {
+                        @if (_editingTable is null && _availableTables is { Count: > 0 })
+                        {
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="block text-sm font-medium text-gray-700">Tables (@_selectedNewTables.Count selected)</label>
+                                    @if (_availableTables.Count > 0)
+                                    {
+                                        <button type="button" @onclick="ToggleSelectAllNewTables"
+                                                class="text-xs text-dusk-blue-500 hover:text-dusk-blue-600">
+                                            @(_selectedNewTables.Count == _availableTables.Count ? "Deselect all" : "Select all")
+                                        </button>
+                                    }
+                                </div>
+                                <input type="text" @bind="_newTableSearchText" @bind:event="oninput" placeholder="Filter tables..."
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors text-sm mb-2" />
+                                <div class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                                    @foreach (var t in _filteredAvailableTables)
+                                    {
+                                        var key = $"{t.Schema}|{t.Name}";
+                                        var label = string.IsNullOrEmpty(t.Schema) ? t.Name : $"{t.Schema}.{t.Name}";
+                                        <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                                            <input type="checkbox"
+                                                   checked="@_selectedNewTables.Contains(key)"
+                                                   @onchange="() => ToggleNewTableSelection(key)"
+                                                   class="size-4 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                                            <span class="text-sm text-gray-700">@label</span>
+                                        </label>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else if (_editingTable is null && _isLoadingDiscoveredTables)
+                        {
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tables</label>
+                                <div class="flex items-center gap-2 text-sm text-gray-500 py-2.5">
+                                    <div class="w-4 h-4 border-2 border-gray-300 border-t-dusk-blue-500 rounded-full animate-spin"></div>
+                                    Loading tables from database...
+                                </div>
+                            </div>
+                        }
+                        else if (_editingTable is not null)
+                        {
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                    <input type="text" @bind="_tableName" placeholder="Table name"
+                                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Schema</label>
+                                    <input type="text" @bind="_tableSchema" placeholder="Optional schema (e.g. dbo)"
+                                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                                </div>
+                            </div>
+                        }
+                    }
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Sync Mode</label>
                         <select @bind="_tableSyncMode"
@@ -436,9 +507,24 @@ else
                             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         Cancel
                     </button>
-                    <button @onclick="SaveTable" disabled="@(string.IsNullOrWhiteSpace(_tableName) || _isDialogSaving)"
+                    <button @onclick="SaveTable" disabled="@(IsDialogSaveDisabled || _isDialogSaving)"
                             class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
-                        @(_isDialogSaving ? "Saving..." : (_editingTable is null ? "Add" : "Save"))
+                        @if (_isDialogSaving)
+                        {
+                            @("Saving...")
+                        }
+                        else if (_isBulkEdit)
+                        {
+                            @($"Apply to {_bulkEditTables.Count} Tables")
+                        }
+                        else if (_editingTable is null)
+                        {
+                            @($"Add {(_selectedNewTables.Count > 0 ? _selectedNewTables.Count : "")} Table{(_selectedNewTables.Count != 1 ? "s" : "")}")
+                        }
+                        else
+                        {
+                            @("Save")
+                        }
                     </button>
                 </div>
             </div>
@@ -459,14 +545,9 @@ else
                     </div>
                     <h2 class="text-lg font-semibold text-gray-900">Delete Table Configuration</h2>
                 </div>
-                <p class="text-sm text-gray-600 mb-2">
-                    This will permanently delete <strong>@_deletingTable?.Name</strong>. This action cannot be undone.
+                <p class="text-sm text-gray-600 mb-6">
+                    Are you sure you want to delete <strong>@_deletingTable?.Name</strong>? This action cannot be undone.
                 </p>
-                <p class="text-sm text-gray-600 mb-4">
-                    Type <strong>@_deletingTable?.Name</strong> to confirm:
-                </p>
-                <input type="text" @bind="_deleteTableConfirmText" placeholder="Enter table name"
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ink-black-500 focus:border-ink-black-500 outline-none transition-colors mb-4" />
 
                 @if (_dialogErrorMessages.Count > 0)
                 {
@@ -483,7 +564,7 @@ else
                             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         Cancel
                     </button>
-                    <button @onclick="DeleteTable" disabled="@(_isDialogSaving || _deleteTableConfirmText != _deletingTable?.Name)"
+                    <button @onclick="DeleteTable" disabled="@_isDialogSaving"
                             class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
                         @(_isDialogSaving ? "Deleting..." : "Delete Table")
                     </button>
@@ -531,6 +612,51 @@ else
                         <pre class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono text-gray-800 whitespace-pre-wrap overflow-x-auto">@_sqlPreviewSnapshotQuery</pre>
                     </div>
                 }
+            </div>
+        </div>
+    </div>
+}
+
+@* Import confirmation dialog *@
+@if (_showImportDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="() => _showImportDialog = false"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                        <span class="i-lucide-upload size-5 text-dusk-blue-500"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Import Configuration</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-2">
+                    This will replace all existing table configurations with <strong>@(_importTables?.Length ?? 0)</strong> table(s) from the imported file.
+                </p>
+                <p class="text-sm text-amber-600 mb-4">
+                    This action cannot be undone. All current tables will be removed.
+                </p>
+
+                @if (_importErrorMessages.Count > 0)
+                {
+                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                        @foreach (var error in _importErrorMessages)
+                        {
+                            <p class="text-sm text-ink-black-500">@error</p>
+                        }
+                    </div>
+                }
+
+                <div class="flex justify-end gap-3">
+                    <button @onclick="() => _showImportDialog = false"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick="ConfirmImport" disabled="@_isImporting"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                        @(_isImporting ? "Importing..." : "Replace & Import")
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -586,6 +712,10 @@ else
     private HashSet<int> _selectedTableIds = [];
     private HashSet<int> _pendingTableDeletions = [];
 
+    // Bulk edit
+    private bool _isBulkEdit;
+    private List<TableConfigDto> _bulkEditTables = [];
+
     // Scaffold & Sort
     private bool _isScaffolding;
     private bool _isSorting;
@@ -593,7 +723,23 @@ else
     // Delete table
     private bool _showDeleteTableDialog;
     private TableConfigDto? _deletingTable;
-    private string _deleteTableConfirmText = "";
+
+    // Discovered tables (cached)
+    private List<DiscoveredTableDto>? _discoveredTables;
+    private bool _isLoadingDiscoveredTables;
+
+    private List<DiscoveredTableDto>? _availableTables =>
+        _discoveredTables?.Where(d =>
+            _tableConfigs?.Any(t =>
+                string.Equals(t.Name, d.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(t.Schema ?? "", d.Schema ?? "", StringComparison.OrdinalIgnoreCase)) != true
+        ).ToList();
+
+    // Import
+    private bool _showImportDialog;
+    private bool _isImporting;
+    private JsonElement[]? _importTables;
+    private List<string> _importErrorMessages = [];
 
     // SQL preview
     private bool _showSqlPreview;
@@ -602,6 +748,7 @@ else
     private string _sqlPreviewSnapshotQuery = "";
 
     private record ConfigurationDetailDto(int Id, string Name, string? Description, int Version, int DataStoreId, string DataStoreName, int DataStoreType, bool HasPublishedEndpoint, bool HasEndpoints);
+    private record DiscoveredTableDto(string Name, string? Schema);
     private record TableConfigDto(
         int Id, string Name, string? Schema, int SyncMode, bool InError, int Sort, string? Message,
         bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery,
@@ -930,6 +1077,43 @@ else
         }
     }
 
+    private bool IsDialogSaveDisabled =>
+        _isBulkEdit ? false
+        : _editingTable is null ? _selectedNewTables.Count == 0
+        : string.IsNullOrWhiteSpace(_tableName);
+
+    // Add table multi-select
+    private HashSet<string> _selectedNewTables = [];
+    private string _newTableSearchText = "";
+
+    private IEnumerable<DiscoveredTableDto> _filteredAvailableTables =>
+        (_availableTables ?? []).Where(t =>
+        {
+            if (string.IsNullOrEmpty(_newTableSearchText)) return true;
+            var label = string.IsNullOrEmpty(t.Schema) ? t.Name : $"{t.Schema}.{t.Name}";
+            return label.Contains(_newTableSearchText, StringComparison.OrdinalIgnoreCase);
+        });
+
+    private void ToggleNewTableSelection(string key)
+    {
+        if (!_selectedNewTables.Remove(key))
+            _selectedNewTables.Add(key);
+    }
+
+    private void ToggleSelectAllNewTables()
+    {
+        if (_availableTables is null) return;
+
+        if (_selectedNewTables.Count == _availableTables.Count)
+        {
+            _selectedNewTables.Clear();
+        }
+        else
+        {
+            _selectedNewTables = _availableTables.Select(t => $"{t.Schema}|{t.Name}").ToHashSet();
+        }
+    }
+
     // SQL preview
     private void ShowSqlPreview(TableConfigDto table)
     {
@@ -940,7 +1124,7 @@ else
     }
 
     // Table config CRUD
-    private void OpenCreateTableDialog()
+    private async Task OpenCreateTableDialog()
     {
         _editingTable = null;
         _tableName = "";
@@ -953,12 +1137,38 @@ else
         _tableSkipColumnsOnInsertOrUpdate = "";
         _tableIdentityInsert = 0;
         _tableForceReloadInsertedRecords = false;
+        _selectedNewTables = [];
+        _newTableSearchText = "";
         _dialogErrorMessages = [];
         _showTableDialog = true;
+
+        if (_discoveredTables is null)
+        {
+            _isLoadingDiscoveredTables = true;
+            try
+            {
+                _discoveredTables = await Http.GetFromJsonAsync<List<DiscoveredTableDto>>($"api/datastoreconfigurations/{ConfigId}/tables/discover");
+            }
+            catch
+            {
+                _discoveredTables = [];
+            }
+            finally
+            {
+                _isLoadingDiscoveredTables = false;
+            }
+        }
     }
 
     private void OpenEditTableDialog(TableConfigDto table)
     {
+        _isBulkEdit = _selectedTableIds.Count > 1 && _selectedTableIds.Contains(table.Id);
+
+        if (_isBulkEdit)
+        {
+            _bulkEditTables = _tableConfigs!.Where(t => _selectedTableIds.Contains(t.Id)).ToList();
+        }
+
         _editingTable = table;
         _tableName = table.Name;
         _tableSchema = table.Schema ?? "";
@@ -978,6 +1188,8 @@ else
     {
         _showTableDialog = false;
         _editingTable = null;
+        _isBulkEdit = false;
+        _bulkEditTables = [];
         _dialogErrorMessages = [];
     }
 
@@ -988,40 +1200,113 @@ else
 
         try
         {
-            var request = new
+            if (_isBulkEdit)
             {
-                Name = _tableName.Trim(),
-                Schema = string.IsNullOrWhiteSpace(_tableSchema) ? (string?)null : _tableSchema.Trim(),
-                SyncMode = _tableSyncMode,
-                SkipInitialSnapshot = _tableSkipInitialSnapshot,
-                SelectIncrementalQuery = string.IsNullOrWhiteSpace(_tableSelectIncrementalQuery) ? (string?)null : _tableSelectIncrementalQuery.Trim(),
-                CustomSnapshotQuery = string.IsNullOrWhiteSpace(_tableCustomSnapshotQuery) ? (string?)null : _tableCustomSnapshotQuery.Trim(),
-                SkipColumns = CommaSeparatedToJsonArray(_tableSkipColumns),
-                SkipColumnsOnInsertOrUpdate = CommaSeparatedToJsonArray(_tableSkipColumnsOnInsertOrUpdate),
-                IdentityInsert = _tableIdentityInsert,
-                ForceReloadInsertedRecords = _tableForceReloadInsertedRecords
-            };
+                var errors = new List<string>();
 
-            HttpResponseMessage response;
+                foreach (var table in _bulkEditTables)
+                {
+                    var request = new
+                    {
+                        Name = table.Name,
+                        Schema = table.Schema,
+                        SyncMode = _tableSyncMode,
+                        SkipInitialSnapshot = _tableSkipInitialSnapshot,
+                        SelectIncrementalQuery = string.IsNullOrWhiteSpace(_tableSelectIncrementalQuery) ? (string?)null : _tableSelectIncrementalQuery.Trim(),
+                        CustomSnapshotQuery = string.IsNullOrWhiteSpace(_tableCustomSnapshotQuery) ? (string?)null : _tableCustomSnapshotQuery.Trim(),
+                        SkipColumns = CommaSeparatedToJsonArray(_tableSkipColumns),
+                        SkipColumnsOnInsertOrUpdate = CommaSeparatedToJsonArray(_tableSkipColumnsOnInsertOrUpdate),
+                        IdentityInsert = _tableIdentityInsert,
+                        ForceReloadInsertedRecords = _tableForceReloadInsertedRecords
+                    };
 
-            if (_editingTable is null)
+                    var response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables/{table.Id}", request);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var tableErrors = await response.Content.ReadFromJsonAsync<List<string>>();
+                        errors.AddRange((tableErrors ?? [$"Failed to update {table.Name}."]).Select(e => $"{table.Name}: {e}"));
+                    }
+                }
+
+                if (errors.Count > 0)
+                {
+                    _dialogErrorMessages = errors;
+                }
+                else
+                {
+                    _selectedTableIds.Clear();
+                    CloseTableDialog();
+                    await LoadTableConfigs();
+                }
+            }
+            else if (_editingTable is not null)
             {
-                response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables", request);
+                var request = new
+                {
+                    Name = _tableName.Trim(),
+                    Schema = string.IsNullOrWhiteSpace(_tableSchema) ? (string?)null : _tableSchema.Trim(),
+                    SyncMode = _tableSyncMode,
+                    SkipInitialSnapshot = _tableSkipInitialSnapshot,
+                    SelectIncrementalQuery = string.IsNullOrWhiteSpace(_tableSelectIncrementalQuery) ? (string?)null : _tableSelectIncrementalQuery.Trim(),
+                    CustomSnapshotQuery = string.IsNullOrWhiteSpace(_tableCustomSnapshotQuery) ? (string?)null : _tableCustomSnapshotQuery.Trim(),
+                    SkipColumns = CommaSeparatedToJsonArray(_tableSkipColumns),
+                    SkipColumnsOnInsertOrUpdate = CommaSeparatedToJsonArray(_tableSkipColumnsOnInsertOrUpdate),
+                    IdentityInsert = _tableIdentityInsert,
+                    ForceReloadInsertedRecords = _tableForceReloadInsertedRecords
+                };
+
+                var response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables/{_editingTable.Id}", request);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    CloseTableDialog();
+                    await LoadTableConfigs();
+                }
+                else
+                {
+                    var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                    _dialogErrorMessages = errors ?? ["An unexpected error occurred."];
+                }
             }
             else
             {
-                response = await Http.PutAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables/{_editingTable.Id}", request);
-            }
+                var errors = new List<string>();
 
-            if (response.IsSuccessStatusCode)
-            {
+                foreach (var key in _selectedNewTables)
+                {
+                    var parts = key.Split('|', 2);
+                    var schema = parts[0];
+                    var name = parts[1];
+
+                    var request = new
+                    {
+                        Name = name,
+                        Schema = string.IsNullOrEmpty(schema) ? (string?)null : schema,
+                        SyncMode = _tableSyncMode,
+                        SkipInitialSnapshot = _tableSkipInitialSnapshot,
+                        SelectIncrementalQuery = string.IsNullOrWhiteSpace(_tableSelectIncrementalQuery) ? (string?)null : _tableSelectIncrementalQuery.Trim(),
+                        CustomSnapshotQuery = string.IsNullOrWhiteSpace(_tableCustomSnapshotQuery) ? (string?)null : _tableCustomSnapshotQuery.Trim(),
+                        SkipColumns = CommaSeparatedToJsonArray(_tableSkipColumns),
+                        SkipColumnsOnInsertOrUpdate = CommaSeparatedToJsonArray(_tableSkipColumnsOnInsertOrUpdate),
+                        IdentityInsert = _tableIdentityInsert,
+                        ForceReloadInsertedRecords = _tableForceReloadInsertedRecords
+                    };
+
+                    var response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables", request);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var tableErrors = await response.Content.ReadFromJsonAsync<List<string>>();
+                        errors.AddRange((tableErrors ?? [$"Failed to add {name}."]).Select(e => $"{name}: {e}"));
+                    }
+                }
+
+                if (errors.Count > 0)
+                {
+                    _dialogErrorMessages = errors;
+                }
+
                 CloseTableDialog();
                 await LoadTableConfigs();
-            }
-            else
-            {
-                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
-                _dialogErrorMessages = errors ?? ["An unexpected error occurred."];
             }
         }
         catch (Exception ex)
@@ -1037,7 +1322,6 @@ else
     private void OpenDeleteTableDialog(TableConfigDto table)
     {
         _deletingTable = table;
-        _deleteTableConfirmText = "";
         _dialogErrorMessages = [];
         _showDeleteTableDialog = true;
     }
@@ -1135,6 +1419,115 @@ else
         finally
         {
             _isSorting = false;
+        }
+    }
+
+    // Import
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _importErrorMessages = [];
+        _importTables = null;
+
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            var json = await JsonSerializer.DeserializeAsync<JsonElement>(stream);
+
+            if (json.TryGetProperty("tables", out var tablesElement) && tablesElement.ValueKind == JsonValueKind.Array)
+            {
+                _importTables = tablesElement.EnumerateArray().ToArray();
+
+                if (_importTables.Length == 0)
+                {
+                    _importErrorMessages = ["The JSON file contains no tables."];
+                    return;
+                }
+
+                _showImportDialog = true;
+            }
+            else
+            {
+                _errorMessages = ["Invalid JSON format: missing 'tables' array."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [$"Failed to read file: {ex.Message}"];
+        }
+    }
+
+    private async Task ConfirmImport()
+    {
+        if (_importTables is null) return;
+
+        _isImporting = true;
+        _importErrorMessages = [];
+
+        try
+        {
+            var tables = _importTables.Select(t =>
+            {
+                var name = t.GetProperty("name").GetString() ?? "";
+                string? schema = t.TryGetProperty("schema", out var s) ? s.GetString() : null;
+                string? syncDirection = t.TryGetProperty("syncDirection", out var sd) ? sd.GetString() : null;
+                int? syncMode = t.TryGetProperty("syncMode", out var sm) && sm.ValueKind == JsonValueKind.Number ? sm.GetInt32() : null;
+                bool skipInitialSnapshot = t.TryGetProperty("skipInitialSnapshot", out var si) && si.GetBoolean();
+                string? selectIncrementalQuery = t.TryGetProperty("selectIncrementalQuery", out var siq) ? siq.GetString() : null;
+                string? customSnapshotQuery = t.TryGetProperty("customSnapshotQuery", out var csq) ? csq.GetString() : null;
+                string? skipColumns = t.TryGetProperty("skipColumns", out var sc) && sc.ValueKind != JsonValueKind.Null
+                    ? (sc.ValueKind == JsonValueKind.Array ? sc.GetRawText() : sc.GetString()) : null;
+                string? skipColumnsOnInsertOrUpdate = t.TryGetProperty("skipColumnsOnInsertOrUpdate", out var sciu) && sciu.ValueKind != JsonValueKind.Null
+                    ? (sciu.ValueKind == JsonValueKind.Array ? sciu.GetRawText() : sciu.GetString()) : null;
+                int identityInsert = 0;
+                if (t.TryGetProperty("identityInsert", out var ii))
+                {
+                    if (ii.ValueKind == JsonValueKind.Number)
+                        identityInsert = ii.GetInt32();
+                    else if (ii.ValueKind == JsonValueKind.String)
+                        identityInsert = ii.GetString() switch { "On" => 1, "Off" => 2, "Disabled" => 3, _ => 0 };
+                }
+                bool forceReloadInsertedRecords = t.TryGetProperty("forceReloadInsertedRecords", out var fr) && fr.ValueKind == JsonValueKind.True;
+
+                return new
+                {
+                    Name = name,
+                    Schema = schema,
+                    SyncDirection = syncDirection,
+                    SyncMode = syncMode,
+                    SkipInitialSnapshot = skipInitialSnapshot,
+                    SelectIncrementalQuery = selectIncrementalQuery,
+                    CustomSnapshotQuery = customSnapshotQuery,
+                    SkipColumns = skipColumns,
+                    SkipColumnsOnInsertOrUpdate = skipColumnsOnInsertOrUpdate,
+                    IdentityInsert = identityInsert,
+                    ForceReloadInsertedRecords = forceReloadInsertedRecords
+                };
+            }).ToArray();
+
+            var request = new { Tables = tables };
+            var response = await Http.PostAsJsonAsync($"api/datastoreconfigurations/{ConfigId}/tables/import", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _tableConfigs = await response.Content.ReadFromJsonAsync<List<TableConfigDto>>();
+                _selectedTableIds.Clear();
+                _pendingTableDeletions.Clear();
+                _showImportDialog = false;
+                _importTables = null;
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _importErrorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _importErrorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isImporting = false;
         }
     }
 
