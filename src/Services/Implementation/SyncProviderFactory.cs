@@ -13,25 +13,44 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 {
     private readonly ISyncLogger _syncLogger = new SyncLoggerAdapter(logger);
 
-    public ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration, ISyncLogger? logger = null)
+    public ISyncProvider CreateSyncProvider(DataStoreConfiguration configuration, ISyncLogger? logger = null, string[]? tables = null)
     {
         var effectiveLogger = logger ?? _syncLogger;
 
         var dataStore = configuration.DataStore
             ?? throw new InvalidOperationException("DataStore must be loaded on the configuration.");
 
-        var tables = configuration.TableConfigurations
+        var configuredTables = configuration.TableConfigurations
             .Where(t => t.SyncMode != DataStoreTableConfigurationSyncMode.NotTracked)
-            .OrderBy(t => t.Sort)
             .ToList();
+
+        List<DataStoreTableConfiguration> orderedTables;
+
+        if (tables is { Length: > 0 })
+        {
+            var tablesByName = configuredTables.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+
+            orderedTables = new List<DataStoreTableConfiguration>(tables.Length);
+            foreach (var tableName in tables)
+            {
+                if (!tablesByName.TryGetValue(tableName, out var tableConfig))
+                    throw new InvalidOperationException($"Table '{tableName}' requested by the client is not present in the endpoint configuration.");
+
+                orderedTables.Add(tableConfig);
+            }
+        }
+        else
+        {
+            orderedTables = configuredTables.OrderBy(t => t.Sort).ToList();
+        }
 
         return dataStore switch
         {
-            SqliteDataStore sqlite => CreateSqliteProvider(sqlite, tables, effectiveLogger),
+            SqliteDataStore sqlite => CreateSqliteProvider(sqlite, orderedTables, effectiveLogger),
             SqlServerDataStore { TrackingMode: SqlServerDataStoreTrackingMode.ChangeTracking } sqlServer
-                => CreateSqlServerCTProvider(sqlServer, tables, effectiveLogger),
-            SqlServerDataStore sqlServer => CreateSqlServerProvider(sqlServer, tables, effectiveLogger),
-            PostgreSqlDataStore postgres => CreatePostgresProvider(postgres, tables, effectiveLogger),
+                => CreateSqlServerCTProvider(sqlServer, orderedTables, effectiveLogger),
+            SqlServerDataStore sqlServer => CreateSqlServerProvider(sqlServer, orderedTables, effectiveLogger),
+            PostgreSqlDataStore postgres => CreatePostgresProvider(postgres, orderedTables, effectiveLogger),
             _ => throw new NotSupportedException($"DataStore type '{dataStore.GetType().Name}' is not supported.")
         };
     }

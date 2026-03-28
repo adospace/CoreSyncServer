@@ -77,9 +77,41 @@ public class SyncController(
         return endpoint;
     }
 
-    private ISyncProvider CreateProvider(DataStoreConfiguration configuration, ISyncLogger? sessionLogger = null)
+    private string[]? GetClientTables()
     {
-        return syncProviderFactory.CreateSyncProvider(configuration, sessionLogger);
+        if (!Request.Headers.TryGetValue(SyncHttpHeaders.Tables, out var tablesHeader))
+            return null;
+
+        var tables = tablesHeader.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (Request.Headers.TryGetValue(SyncHttpHeaders.TablesCount, out var countHeader)
+            && int.TryParse(countHeader, out var expectedCount)
+            && tables.Length != expectedCount)
+        {
+            throw new ArgumentException($"Expected {expectedCount} table names in {SyncHttpHeaders.Tables} header but received {tables.Length}. The header may have been truncated.");
+        }
+
+        return tables;
+    }
+
+    private async Task<(Data.Endpoint Endpoint, ISyncProvider Provider)> GetProviderAsync(
+        Guid endpointId, CancellationToken cancellationToken, ISyncLogger? sessionLogger = null)
+    {
+        var tables = GetClientTables();
+        var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+
+        if (sessionLogger is null && tables is null)
+        {
+            var cacheKey = $"SyncProvider:{endpointId}";
+            if (memoryCache.TryGetValue(cacheKey, out var cached) && cached is ISyncProvider cachedProvider)
+                return (endpoint, cachedProvider);
+
+            var provider = syncProviderFactory.CreateSyncProvider(endpoint.DataStoreConfiguration!);
+            memoryCache.Set(cacheKey, provider);
+            return (endpoint, provider);
+        }
+
+        return (endpoint, syncProviderFactory.CreateSyncProvider(endpoint.DataStoreConfiguration!, sessionLogger, tables));
     }
 
     [HttpGet("store-id")]
@@ -87,8 +119,7 @@ public class SyncController(
     {
         try
         {
-            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
-            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
+            var (_, provider) = await GetProviderAsync(endpointId, cancellationToken);
             var storeId = await provider.GetStoreIdAsync(cancellationToken);
             return Ok(storeId.ToString());
         }
@@ -103,8 +134,7 @@ public class SyncController(
     {
         try
         {
-            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
-            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
+            var (_, provider) = await GetProviderAsync(endpointId, cancellationToken);
             var version = await provider.GetSyncVersionAsync(cancellationToken);
             return Ok(version);
         }
@@ -119,7 +149,7 @@ public class SyncController(
     {
         try
         {
-            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
+            var (endpoint, _) = await GetProviderAsync(endpointId, cancellationToken);
             var dataStoreId = endpoint.DataStoreConfiguration!.DataStoreId;
 
             var session = await syncSessionService.StartAsync(dataStoreId, cancellationToken);
@@ -127,7 +157,7 @@ public class SyncController(
 
             try
             {
-                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
+                var (_, provider) = await GetProviderAsync(endpointId, cancellationToken, sessionLogger);
                 var filterParams = GetSyncFilterParameters(HttpContext);
                 var changeSet = await provider.GetChangesAsync(storeId, syncFilterParameters: filterParams, syncDirection: SyncDirection.DownloadOnly, cancellationToken: cancellationToken);
 
@@ -212,23 +242,25 @@ public class SyncController(
     [HttpPost("changes-bulk-begin")]
     public async Task<ActionResult> BeginApplyBulkChanges(Guid endpointId, [FromBody] BulkSyncChangeSet bulkChangeSet, CancellationToken cancellationToken)
     {
-        var endpoint = await context.Endpoints
-            .Include(e => e.DataStoreConfiguration)
-            .FirstOrDefaultAsync(e => e.Id == endpointId, cancellationToken);
-
-        if (endpoint?.DataStoreConfiguration is null)
-            return NotFound();
-
-        var session = await syncSessionService.StartAsync(endpoint.DataStoreConfiguration.DataStoreId, cancellationToken);
-
-        var changeSet = new SyncChangeSet(bulkChangeSet.SourceAnchor, bulkChangeSet.TargetAnchor, new List<SyncItem>());
-        memoryCache.Set(bulkChangeSet.SessionId, new CachedUploadSession
+        try
         {
-            ChangeSet = changeSet,
-            SyncSessionId = session.Id
-        });
+            var (endpoint, _) = await GetProviderAsync(endpointId, cancellationToken);
 
-        return Ok();
+            var session = await syncSessionService.StartAsync(endpoint.DataStoreConfiguration!.DataStoreId, cancellationToken);
+
+            var changeSet = new SyncChangeSet(bulkChangeSet.SourceAnchor, bulkChangeSet.TargetAnchor, new List<SyncItem>());
+            memoryCache.Set(bulkChangeSet.SessionId, new CachedUploadSession
+            {
+                ChangeSet = changeSet,
+                SyncSessionId = session.Id
+            });
+
+            return Ok();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     [HttpPost("changes-bulk-item")]
@@ -282,8 +314,7 @@ public class SyncController(
 
             try
             {
-                var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
-                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
+                var (_, provider) = await GetProviderAsync(endpointId, cancellationToken, sessionLogger);
                 var resAnchor = await provider.ApplyChangesAsync(changeSet, updateResultion: ConflictResolution.ForceWrite, deleteResolution: ConflictResolution.Skip);
 
                 memoryCache.Remove(sessionId);
@@ -322,8 +353,7 @@ public class SyncController(
 
             try
             {
-                var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
-                var provider = CreateProvider(endpoint.DataStoreConfiguration!, sessionLogger);
+                var (_, provider) = await GetProviderAsync(endpointId, cancellationToken, sessionLogger);
                 var resAnchor = await provider.ApplyChangesAsync(changeSet, updateResultion: ConflictResolution.ForceWrite, deleteResolution: ConflictResolution.Skip);
 
                 memoryCache.Remove(sessionId);
@@ -357,8 +387,7 @@ public class SyncController(
     {
         try
         {
-            var endpoint = await GetEndpointAsync(endpointId, cancellationToken);
-            var provider = CreateProvider(endpoint.DataStoreConfiguration!);
+            var (_, provider) = await GetProviderAsync(endpointId, cancellationToken);
 
             logger.LogInformation("SaveVersionForStore(Endpoint={EndpointId}, StoreId={StoreId}, Version={Version})", endpointId, storeId, version);
 
