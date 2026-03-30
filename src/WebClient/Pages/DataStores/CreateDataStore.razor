@@ -116,6 +116,7 @@
                             <textarea @bind="_connectionString" rows="3"
                                       placeholder="@GetConnectionStringPlaceholder()"
                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors font-mono text-sm resize-none"></textarea>
+                            <p class="mt-1 text-xs text-gray-500">Use <code class="bg-gray-100 px-1 rounded">ENV=VARIABLE_NAME</code> to read the connection string from an environment variable.</p>
                         </div>
                     }
                 </div>
