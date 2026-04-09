@@ -232,7 +232,7 @@ public class SyncController(
             if (skip + take >= cached.ChangeSet.Items.Count)
                 memoryCache.Remove(sessionId);
 
-            var bytes = MessagePackSerializer.Typeless.Serialize(bufferList);
+            var bytes = CoreSyncMessagePackSerializer.Serialize<object>(bufferList);
             return File(bytes, "application/x-msgpack");
         }
 
@@ -278,8 +278,8 @@ public class SyncController(
     [HttpPost("changes-bulk-item-binary")]
     public async Task<ActionResult> ApplyBulkChangesItemBinary()
     {
-        var bulkUploadItem = (BulkChangeSetUploadItem?)
-            await MessagePackSerializer.Typeless.DeserializeAsync(Request.Body);
+        var bulkUploadItem = ((BulkChangeSetUploadItem?)
+            await CoreSyncMessagePackSerializer.DeserializeAsync<object>(Request.Body)) ?? throw new InvalidProgramException();
 
         if (bulkUploadItem is null)
             return BadRequest();
