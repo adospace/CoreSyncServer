@@ -1,4 +1,6 @@
-@* SVG bar chart showing sync session activity over time *@
+@using ApexCharts
+
+@* Stacked bar chart showing sync session activity over time, powered by ApexCharts *@
 
 <div class="activity-chart">
     @if (DataPoints is null || DataPoints.Count == 0)
@@ -9,79 +11,20 @@
     }
     else
     {
-        <div class="flex items-center gap-4 mb-3 text-xs text-gray-500">
-            <div class="flex items-center gap-1.5">
-                <span class="inline-block w-2.5 h-2.5 rounded-sm" style="background-color: #415a77;"></span>
-                Completed
-            </div>
-            <div class="flex items-center gap-1.5">
-                <span class="inline-block w-2.5 h-2.5 rounded-sm" style="background-color: #dc2626;"></span>
-                Errors
-            </div>
-        </div>
-        <div class="overflow-x-auto">
-            <svg viewBox="0 0 @_viewBoxWidth @ViewBoxHeight" class="w-full h-64" preserveAspectRatio="xMidYMid meet">
-                @* Y-axis grid lines and labels *@
-                @for (var i = 0; i <= GridLines; i++)
-                {
-                    var y = ChartTop + (ChartHeight * i / GridLines);
-                    var value = _maxValue - (_maxValue * i / GridLines);
-                    <line x1="@ChartLeft" y1="@y" x2="@(_viewBoxWidth - Padding)" y2="@y"
-                          stroke="#e5e7eb" stroke-width="0.5" />
-                    @((MarkupString)FormattableString.Invariant($"<text x=\"{ChartLeft - 6}\" y=\"{y + 3}\" text-anchor=\"end\" fill=\"#9ca3af\" font-size=\"9\">{value}</text>"))
-                }
-
-                @* Bars *@
-                @for (var i = 0; i < DataPoints.Count; i++)
-                {
-                    var dp = DataPoints[i];
-                    var total = dp.Completed + dp.Errors;
-                    var barX = ChartLeft + (i * (_barWidth + BarGap));
-
-                    @if (total > 0 && _maxValue > 0)
-                    {
-                        var totalBarHeight = (double)total / _maxValue * ChartHeight;
-                        var completedBarHeight = (double)dp.Completed / _maxValue * ChartHeight;
-                        var errorBarHeight = totalBarHeight - completedBarHeight;
-
-                        @* Completed portion (bottom) *@
-                        @if (dp.Completed > 0)
-                        {
-                            <rect x="@barX" y="@(ChartBottom - completedBarHeight)"
-                                  width="@_barWidth" height="@completedBarHeight"
-                                  rx="1.5" fill="#415a77" class="chart-bar">
-                                <title>@dp.Date.ToString("MMM dd", System.Globalization.CultureInfo.InvariantCulture): @dp.Completed completed</title>
-                            </rect>
-                        }
-
-                        @* Error portion (top, stacked on completed) *@
-                        @if (dp.Errors > 0)
-                        {
-                            <rect x="@barX" y="@(ChartBottom - totalBarHeight)"
-                                  width="@_barWidth" height="@errorBarHeight"
-                                  rx="1.5" fill="#dc2626" class="chart-bar">
-                                <title>@dp.Date.ToString("MMM dd", System.Globalization.CultureInfo.InvariantCulture): @dp.Errors errors</title>
-                            </rect>
-                        }
-                    }
-
-                    @* X-axis labels — show every Nth label to avoid crowding *@
-                    @if (i % _labelInterval == 0 || i == DataPoints.Count - 1)
-                    {
-                        var labelX = barX + _barWidth / 2;
-                        var labelY = ChartBottom + 14;
-                        var label = dp.Date.ToString("MMM dd", System.Globalization.CultureInfo.InvariantCulture);
-                        @((MarkupString)FormattableString.Invariant($"<text x=\"{labelX}\" y=\"{labelY}\" text-anchor=\"middle\" fill=\"#9ca3af\" font-size=\"8\">{label}</text>"))
-                    }
-                }
-
-                @* Axes *@
-                <line x1="@ChartLeft" y1="@ChartTop" x2="@ChartLeft" y2="@ChartBottom"
-                      stroke="#d1d5db" stroke-width="0.5" />
-                <line x1="@ChartLeft" y1="@ChartBottom" x2="@(_viewBoxWidth - Padding)" y2="@ChartBottom"
-                      stroke="#d1d5db" stroke-width="0.5" />
-            </svg>
-        </div>
+        <ApexChart TItem="DataPoint" Options="_options" Height="256">
+            <ApexPointSeries TItem="DataPoint"
+                             Items="DataPoints"
+                             Name="Completed"
+                             SeriesType="SeriesType.Bar"
+                             XValue="@(d => d.Date.ToString("MMM dd", System.Globalization.CultureInfo.InvariantCulture))"
+                             YValue="@(d => d.Completed)" />
+            <ApexPointSeries TItem="DataPoint"
+                             Items="DataPoints"
+                             Name="Errors"
+                             SeriesType="SeriesType.Bar"
+                             XValue="@(d => d.Date.ToString("MMM dd", System.Globalization.CultureInfo.InvariantCulture))"
+                             YValue="@(d => d.Errors)" />
+        </ApexChart>
     }
 </div>
 
@@ -91,38 +34,31 @@
 
     public record DataPoint(DateTime Date, int Completed, int Errors);
 
-    private const int Padding = 12;
-    private const int ChartLeft = 40;
-    private const int ChartTop = 8;
-    private const int ViewBoxHeight = 200;
-    private const int ChartHeight = ViewBoxHeight - ChartTop - 30;
-    private const int ChartBottom = ChartTop + ChartHeight;
-    private const int BarGap = 3;
-    private const int GridLines = 4;
-
-    private int _maxValue = 1;
-    private double _barWidth = 10;
-    private int _viewBoxWidth = 600;
-    private int _labelInterval = 5;
-
-    protected override void OnParametersSet()
+    private readonly ApexChartOptions<DataPoint> _options = new()
     {
-        if (DataPoints is null || DataPoints.Count == 0) return;
-
-        var rawMax = DataPoints.Max(d => d.Completed + d.Errors);
-        _maxValue = rawMax == 0 ? 1 : RoundUpMax(rawMax);
-
-        var count = DataPoints.Count;
-        _barWidth = Math.Max(4, (500.0 - (count - 1) * BarGap) / count);
-        _viewBoxWidth = (int)(ChartLeft + count * (_barWidth + BarGap) + Padding);
-        _labelInterval = count <= 14 ? 1 : count <= 30 ? 3 : 7;
-    }
-
-    private static int RoundUpMax(int value)
-    {
-        if (value <= 5) return value;
-        var magnitude = (int)Math.Pow(10, Math.Floor(Math.Log10(value)));
-        var step = magnitude < 1 ? 1 : magnitude;
-        return ((value / step) + 1) * step;
-    }
+        Chart = new Chart
+        {
+            Stacked = true,
+            Toolbar = new Toolbar { Show = false },
+            FontFamily = "inherit",
+        },
+        Colors = new List<string> { "#415a77", "#dc2626" },
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                BorderRadius = 2,
+                ColumnWidth = "70%",
+            }
+        },
+        DataLabels = new DataLabels { Enabled = false },
+        Stroke = new Stroke { Show = false },
+        Legend = new Legend
+        {
+            Position = LegendPosition.Top,
+            HorizontalAlign = ApexCharts.Align.Left,
+            FontSize = "12px",
+        },
+        Grid = new Grid { BorderColor = "#e5e7eb" },
+    };
 }
