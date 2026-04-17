@@ -204,7 +204,6 @@ else
 
     private record AgentDetailDto(int Id, string Name, string? Description, bool Enabled, DateTime CreatedDate, DateTime? LastSeen, bool IsConnected, string ApiKey);
     private record LinkedDataStoreDto(int Id, string Name, string Type);
-    private record DataStoreDto(int Id, string Name, string? Description, string Type, string ProjectName, int ProjectId, int ConfigurationsCount, int SyncSessionsCount);
 
     protected override async Task OnInitializedInteractiveAsync()
     {
@@ -225,19 +224,9 @@ else
 
     private async Task LoadLinkedDataStores()
     {
-        var all = await Http.GetFromJsonAsync<List<DataStoreDto>>("api/datastores");
-        var agentStores = await Http.GetFromJsonAsync<List<DataStoreLinkedDto>>($"api/agents/{AgentId}/datastores");
-        if (agentStores is not null)
-        {
-            _linkedDataStores = agentStores.Select(d => new LinkedDataStoreDto(d.Id, d.Name, d.Type)).ToList();
-        }
-        else if (all is not null)
-        {
-            _linkedDataStores = [];
-        }
+        var agentStores = await Http.GetFromJsonAsync<List<LinkedDataStoreDto>>($"api/agents/{AgentId}/datastores");
+        _linkedDataStores = agentStores ?? [];
     }
-
-    private record DataStoreLinkedDto(int Id, string Name, string Type);
 
     private async Task SaveDetails()
     {
