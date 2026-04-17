@@ -419,3 +419,6 @@ FodyWeavers.xsd
 
 # Claude Code
 .claude/
+
+# Local development app settings
+appsettings.Development.json

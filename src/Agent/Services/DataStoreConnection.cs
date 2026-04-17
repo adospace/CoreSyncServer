@@ -59,6 +59,21 @@ public sealed class DataStoreConnection : IAsyncDisposable
         RegisterClientHandlers();
 
         _connection.Closed += OnClosed;
+        _connection.Reconnecting += OnReconnecting;
+        _connection.Reconnected += OnReconnected;
+    }
+
+    private Task OnReconnecting(Exception? exception)
+    {
+        _logger.LogWarning(exception, "Hub reconnecting for DataStore {Id} ({Name})", DataStoreId, DataStoreName);
+        return Task.CompletedTask;
+    }
+
+    private Task OnReconnected(string? connectionId)
+    {
+        _logger.LogInformation("Hub reconnected for DataStore {Id} ({Name}); connection {ConnectionId}",
+            DataStoreId, DataStoreName, connectionId);
+        return Task.CompletedTask;
     }
 
     public async Task ConnectAsync(Guid ticket, CancellationToken ct)
