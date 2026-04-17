@@ -1,5 +1,7 @@
 using CoreSyncServer.Agent.Contracts;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 
 namespace CoreSyncServer.Agent.Services;
 
@@ -17,6 +19,26 @@ public class AgentOrchestrator(
     private readonly AgentOptions _options = options.Value;
     private readonly Dictionary<int, DataStoreConnection> _connections = new();
     private readonly SemaphoreSlim _reinitLock = new(1, 1);
+
+    private readonly ResiliencePipeline _initPipeline = new ResiliencePipelineBuilder()
+        .AddRetry(new RetryStrategyOptions
+        {
+            ShouldHandle = new PredicateBuilder().Handle<Exception>(ex => ex is not OperationCanceledException),
+            MaxRetryAttempts = int.MaxValue,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(options.Value.InitPollOnFailureMs),
+            MaxDelay = TimeSpan.FromMilliseconds(options.Value.ReconnectMaxDelayMs),
+            OnRetry = args =>
+            {
+                logger.LogWarning(
+                    args.Outcome.Exception,
+                    "GetInitAsync failed; retrying in {Delay}ms (attempt {Attempt})",
+                    args.RetryDelay.TotalMilliseconds,
+                    args.AttemptNumber + 1);
+                return ValueTask.CompletedTask;
+            }
+        })
+        .Build();
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -45,7 +67,9 @@ public class AgentOrchestrator(
     {
         var reconnectSignal = new TaskCompletionSource();
 
-        AgentInitResponse init = await InitializeWithRetryAsync(ct);
+        AgentInitResponse init = await _initPipeline.ExecuteAsync(
+            async token => await serverClient.GetInitAsync(token),
+            ct);
 
         logger.LogInformation(
             "Initialized as agent '{Agent}' ({Id}) with {Count} DataStore(s)",
@@ -92,24 +116,6 @@ public class AgentOrchestrator(
         }
 
         await TearDownAllAsync();
-    }
-
-    private async Task<AgentInitResponse> InitializeWithRetryAsync(CancellationToken ct)
-    {
-        var delay = _options.InitPollOnFailureMs;
-        while (true)
-        {
-            try
-            {
-                return await serverClient.GetInitAsync(ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "GetInitAsync failed; retrying in {Delay}ms", delay);
-                await Task.Delay(delay, ct);
-                delay = Math.Min(delay * 2, _options.ReconnectMaxDelayMs);
-            }
-        }
     }
 
     private async Task TearDownAllAsync()
