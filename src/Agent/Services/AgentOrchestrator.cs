@@ -1,13 +1,20 @@
+using System.Threading.Channels;
 using CoreSyncServer.Agent.Contracts;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
-using Polly;
-using Polly.Retry;
 
 namespace CoreSyncServer.Agent.Services;
 
 /// <summary>
-/// Drives the agent lifecycle: fetch DataStore list from the server, open one hub connection per
-/// DataStore, and re-run the whole sequence on any permanent disconnect.
+/// Single reconcile loop that keeps the agent aligned with the server. On each tick it:
+///   1. Polls <c>/api/agent/datastores</c> for the latest assignments (this is also the server
+///      reachability probe — if it fails, existing connections are left alone and we retry next tick).
+///   2. Adds/removes/rebuilds <see cref="DataStoreConnection"/>s so they match the server's response.
+///      A connection is rebuilt when its state is not Connected, or when the server issued a new
+///      configuration version or a new one-shot ticket.
+///   3. Heartbeats each still-healthy connection; a failed probe flags it for rebuild next tick.
+/// Lost transports and server-pushed <see cref="ConfigurationChangedMessage"/>s wake the loop
+/// early via <see cref="DataStoreConnection.OnNeedsAttention"/>.
 /// </summary>
 public class AgentOrchestrator(
     IServerClient serverClient,
@@ -18,125 +25,168 @@ public class AgentOrchestrator(
 {
     private readonly AgentOptions _options = options.Value;
     private readonly Dictionary<int, DataStoreConnection> _connections = new();
-    private readonly SemaphoreSlim _reinitLock = new(1, 1);
 
-    private readonly ResiliencePipeline _initPipeline = new ResiliencePipelineBuilder()
-        .AddRetry(new RetryStrategyOptions
-        {
-            ShouldHandle = new PredicateBuilder().Handle<Exception>(ex => ex is not OperationCanceledException),
-            MaxRetryAttempts = int.MaxValue,
-            BackoffType = DelayBackoffType.Exponential,
-            Delay = TimeSpan.FromMilliseconds(options.Value.InitPollOnFailureMs),
-            MaxDelay = TimeSpan.FromMilliseconds(options.Value.ReconnectMaxDelayMs),
-            OnRetry = args =>
-            {
-                logger.LogWarning(
-                    args.Outcome.Exception,
-                    "GetInitAsync failed; retrying in {Delay}ms (attempt {Attempt})",
-                    args.RetryDelay.TotalMilliseconds,
-                    args.AttemptNumber + 1);
-                return ValueTask.CompletedTask;
-            }
-        })
-        .Build();
+    private readonly Channel<bool> _wake = Channel.CreateBounded<bool>(
+        new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite });
 
     public async Task RunAsync(CancellationToken ct)
     {
-        while (!ct.IsCancellationRequested)
+        logger.LogInformation(
+            "Orchestrator starting: PollIntervalMs={Poll} ProbeTimeoutMs={Probe}",
+            _options.PollIntervalMs, _options.ProbeTimeoutMs);
+
+        try
         {
-            try
+            while (!ct.IsCancellationRequested)
             {
-                await RunOnceAsync(ct);
-                // RunOnceAsync returns when a permanent disconnect fires; loop re-inits.
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Unexpected error in orchestrator loop. Backing off before retry.");
-                await BackoffAsync(_options.InitPollOnFailureMs, ct);
+                try
+                {
+                    await TickAsync(ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Unexpected error in orchestrator tick; will retry.");
+                }
+
+                await WaitForNextTickAsync(ct);
             }
         }
-
-        await TearDownAllAsync();
+        finally
+        {
+            await TearDownAllAsync();
+        }
     }
 
-    private async Task RunOnceAsync(CancellationToken ct)
+    private async Task TickAsync(CancellationToken ct)
     {
-        var reconnectSignal = new TaskCompletionSource();
+        AgentInitResponse init;
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(_options.ProbeTimeoutMs * 2);
+            init = await serverClient.GetInitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "GetInitAsync failed; keeping {Count} existing connection(s) and retrying in {Ms}ms.",
+                _connections.Count, _options.PollIntervalMs);
+            return;
+        }
 
-        AgentInitResponse init = await _initPipeline.ExecuteAsync(
-            async token => await serverClient.GetInitAsync(token),
-            ct);
-
-        logger.LogInformation(
-            "Initialized as agent '{Agent}' ({Id}) with {Count} DataStore(s)",
+        logger.LogDebug(
+            "Tick: agent '{Agent}' ({Id}), server reports {Count} DataStore(s)",
             init.AgentName, init.AgentId, init.DataStores.Count);
 
-        foreach (var dsDto in init.DataStores)
+        var incomingIds = new HashSet<int>(init.DataStores.Select(d => d.Id));
+
+        foreach (var removedId in _connections.Keys.Except(incomingIds).ToList())
         {
-            var conn = new DataStoreConnection(
-                dsDto,
-                options,
-                syncHandler,
-                loggerFactory.CreateLogger<DataStoreConnection>());
+            logger.LogInformation("DataStore {Id} no longer assigned; disposing connection.", removedId);
+            var removed = _connections[removedId];
+            _connections.Remove(removedId);
+            await removed.DisposeAsync();
+        }
 
-            conn.OnPermanentDisconnect += _ =>
-            {
-                // Any permanent disconnect triggers a full re-init.
-                reconnectSignal.TrySetResult();
-            };
+        foreach (var ds in init.DataStores)
+        {
+            await EnsureConnectionAsync(ds, ct);
+        }
+    }
 
-            try
+    private async Task EnsureConnectionAsync(AgentDataStoreDto ds, CancellationToken ct)
+    {
+        var incomingVersion = ds.Configurations.FirstOrDefault()?.Version ?? 0;
+
+        if (_connections.TryGetValue(ds.Id, out var existing))
+        {
+            // Tickets are one-shot and regenerated every poll, so they're not a change signal —
+            // only configuration version bumps and bad connection state are.
+            var versionChanged = existing.ConfigurationVersion != incomingVersion;
+            var stateBad = existing.State != HubConnectionState.Connected;
+
+            if (!versionChanged && !stateBad)
             {
-                await conn.ConnectAsync(dsDto.ConnectionTicket, ct);
-                _connections[dsDto.Id] = conn;
+                if (await existing.HealthProbeAsync(ct)) return;
+
+                logger.LogWarning("Heartbeat probe failed for DataStore {Id} ({Name}); rebuilding.",
+                    ds.Id, ds.Name);
             }
-            catch (Exception ex)
+            else if (versionChanged)
             {
-                logger.LogError(ex, "Failed to connect for DataStore {Id} ({Name}); will re-init.",
-                    dsDto.Id, dsDto.Name);
-                await conn.DisposeAsync();
-                reconnectSignal.TrySetResult();
-                break;
+                logger.LogInformation(
+                    "DataStore {Id} ({Name}) configuration v{Old} → v{New}; rebuilding.",
+                    ds.Id, ds.Name, existing.ConfigurationVersion, incomingVersion);
             }
+            else
+            {
+                logger.LogInformation(
+                    "DataStore {Id} ({Name}) connection state is {State}; rebuilding.",
+                    ds.Id, ds.Name, existing.State);
+            }
+
+            _connections.Remove(ds.Id);
+            await existing.DisposeAsync();
         }
 
-        // Wait until a connection drops permanently (or until cancellation).
-        using (ct.Register(() => reconnectSignal.TrySetResult()))
+        var conn = new DataStoreConnection(
+            ds,
+            options,
+            syncHandler,
+            loggerFactory.CreateLogger<DataStoreConnection>());
+
+        conn.OnNeedsAttention += TriggerWake;
+
+        try
         {
-            await reconnectSignal.Task;
+            await conn.ConnectAsync(ct);
+            _connections[ds.Id] = conn;
         }
-
-        if (!ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            logger.LogInformation("A permanent disconnect occurred — tearing down and re-initializing.");
+            await conn.DisposeAsync();
+            throw;
         }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to connect DataStore {Id} ({Name}); will retry next tick.",
+                ds.Id, ds.Name);
+            await conn.DisposeAsync();
+        }
+    }
 
-        await TearDownAllAsync();
+    private void TriggerWake() => _wake.Writer.TryWrite(true);
+
+    private async Task WaitForNextTickAsync(CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(_options.PollIntervalMs);
+        try
+        {
+            await _wake.Reader.ReadAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Poll interval elapsed — proceed to next tick.
+        }
     }
 
     private async Task TearDownAllAsync()
     {
-        await _reinitLock.WaitAsync();
-        try
+        foreach (var conn in _connections.Values)
         {
-            foreach (var conn in _connections.Values)
-            {
-                await conn.DisposeAsync();
-            }
-            _connections.Clear();
+            try { await conn.DisposeAsync(); }
+            catch (Exception ex) { logger.LogDebug(ex, "Error disposing connection for DataStore {Id}", conn.DataStoreId); }
         }
-        finally
-        {
-            _reinitLock.Release();
-        }
-    }
-
-    private static async Task BackoffAsync(int delayMs, CancellationToken ct)
-    {
-        try { await Task.Delay(delayMs, ct); } catch (OperationCanceledException) { }
+        _connections.Clear();
     }
 }

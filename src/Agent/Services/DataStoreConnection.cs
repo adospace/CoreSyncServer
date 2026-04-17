@@ -5,8 +5,10 @@ using Microsoft.Extensions.Options;
 namespace CoreSyncServer.Agent.Services;
 
 /// <summary>
-/// One HubConnection bound to a specific DataStore. Handles the ticket handshake,
-/// heartbeats, and raises <see cref="OnPermanentDisconnect"/> when auto-reconnect gives up.
+/// One HubConnection bound to a specific DataStore. Passive: no auto-reconnect and no internal
+/// heartbeat loop — health and lifecycle are owned by <see cref="AgentOrchestrator"/>, which
+/// probes and rebuilds this connection on every tick. Tickets are one-shot, so rebuilding
+/// (instead of reconnecting in-place) is required to re-join the correct hub group.
 /// </summary>
 public sealed class DataStoreConnection : IAsyncDisposable
 {
@@ -14,15 +16,21 @@ public sealed class DataStoreConnection : IAsyncDisposable
     private readonly IAgentSyncHandler _syncHandler;
     private readonly ILogger<DataStoreConnection> _logger;
     private readonly HubConnection _connection;
-    private readonly PeriodicTimer _heartbeatTimer;
-    private CancellationTokenSource? _heartbeatCts;
     private bool _disposed;
 
     public int DataStoreId { get; }
 
     public string DataStoreName { get; }
 
-    public event Action<int>? OnPermanentDisconnect;
+    public int ConfigurationVersion { get; }
+
+    private readonly Guid _connectionTicket;
+
+    public HubConnectionState State => _connection.State;
+
+    /// <summary>Raised when the transport closes or the server signals configuration changed.
+    /// Lets the orchestrator wake its reconcile loop without waiting for the next scheduled tick.</summary>
+    public event Action? OnNeedsAttention;
 
     public DataStoreConnection(
         AgentDataStoreDto dataStore,
@@ -35,6 +43,8 @@ public sealed class DataStoreConnection : IAsyncDisposable
         _logger = logger;
         DataStoreId = dataStore.Id;
         DataStoreName = dataStore.Name;
+        _connectionTicket = dataStore.ConnectionTicket;
+        ConfigurationVersion = dataStore.Configurations.FirstOrDefault()?.Version ?? 0;
 
         var hubUrl = new Uri(new Uri(_options.ServerUrl), AgentAuthHeaders.HubPath);
         _connection = new HubConnectionBuilder()
@@ -43,58 +53,58 @@ public sealed class DataStoreConnection : IAsyncDisposable
                 opts.Headers[AgentAuthHeaders.ApiKeyHeader] = _options.ApiKey;
                 opts.AccessTokenProvider = () => Task.FromResult<string?>(_options.ApiKey);
             })
-            .WithAutomaticReconnect(new[]
-            {
-                TimeSpan.Zero,
-                TimeSpan.FromSeconds(2),
-                TimeSpan.FromSeconds(5),
-                TimeSpan.FromSeconds(10),
-                TimeSpan.FromSeconds(15),
-                TimeSpan.FromSeconds(30)
-            })
             .Build();
 
-        _heartbeatTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(_options.HeartbeatIntervalMs));
-
         RegisterClientHandlers();
-
         _connection.Closed += OnClosed;
-        _connection.Reconnecting += OnReconnecting;
-        _connection.Reconnected += OnReconnected;
     }
 
-    private Task OnReconnecting(Exception? exception)
-    {
-        _logger.LogWarning(exception, "Hub reconnecting for DataStore {Id} ({Name})", DataStoreId, DataStoreName);
-        return Task.CompletedTask;
-    }
-
-    private Task OnReconnected(string? connectionId)
-    {
-        _logger.LogInformation("Hub reconnected for DataStore {Id} ({Name}); connection {ConnectionId}",
-            DataStoreId, DataStoreName, connectionId);
-        return Task.CompletedTask;
-    }
-
-    public async Task ConnectAsync(Guid ticket, CancellationToken ct)
+    public async Task ConnectAsync(CancellationToken ct)
     {
         await _connection.StartAsync(ct);
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(_options.ProbeTimeoutMs);
+
         var ok = await _connection.InvokeAsync<bool>(
             nameof(IAgentHub.AcknowledgeConnected),
-            ticket,
-            ct);
+            _connectionTicket,
+            timeoutCts.Token);
 
         if (!ok)
         {
-            _logger.LogWarning("AcknowledgeConnected rejected for DataStore {Id}", DataStoreId);
             throw new InvalidOperationException($"Server rejected connection ticket for DataStore {DataStoreId}.");
         }
 
-        _logger.LogInformation("Connected to hub for DataStore {Id} ({Name})", DataStoreId, DataStoreName);
+        _logger.LogInformation("Connected to hub for DataStore {Id} ({Name}), config v{Version}",
+            DataStoreId, DataStoreName, ConfigurationVersion);
+    }
 
-        _heartbeatCts = new CancellationTokenSource();
-        _ = RunHeartbeatLoop(_heartbeatCts.Token);
+    /// <summary>
+    /// Invokes a short-timeout Heartbeat on the hub. Returns false if the transport is not Connected
+    /// or the invoke fails, in which case the orchestrator will rebuild this connection.
+    /// </summary>
+    public async Task<bool> HealthProbeAsync(CancellationToken ct)
+    {
+        if (_connection.State != HubConnectionState.Connected) return false;
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(_options.ProbeTimeoutMs);
+
+        try
+        {
+            await _connection.InvokeAsync(nameof(IAgentHub.Heartbeat), timeoutCts.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Heartbeat probe failed for DataStore {Id} ({Name})", DataStoreId, DataStoreName);
+            return false;
+        }
     }
 
     private void RegisterClientHandlers()
@@ -103,47 +113,27 @@ public sealed class DataStoreConnection : IAsyncDisposable
             async msg => await _syncHandler.OnSyncRequestedAsync(DataStoreId, msg, CancellationToken.None));
 
         _connection.On<ConfigurationChangedMessage>(nameof(IAgentHubClient.OnConfigurationChanged),
-            async msg => await _syncHandler.OnConfigurationChangedAsync(DataStoreId, msg, CancellationToken.None));
+            async msg =>
+            {
+                await _syncHandler.OnConfigurationChangedAsync(DataStoreId, msg, CancellationToken.None);
+                OnNeedsAttention?.Invoke();
+            });
 
         _connection.On(nameof(IAgentHubClient.Ping), () => Task.CompletedTask);
     }
 
-    private async Task RunHeartbeatLoop(CancellationToken ct)
-    {
-        try
-        {
-            while (await _heartbeatTimer.WaitForNextTickAsync(ct))
-            {
-                if (_connection.State != HubConnectionState.Connected) continue;
-                try
-                {
-                    await _connection.InvokeAsync(nameof(IAgentHub.Heartbeat), ct);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogDebug(ex, "Heartbeat failed for DataStore {Id}", DataStoreId);
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-    }
-
     private Task OnClosed(Exception? exception)
     {
+        if (_disposed) return Task.CompletedTask;
+
         _logger.LogWarning(exception, "Hub connection closed for DataStore {Id} ({Name})", DataStoreId, DataStoreName);
-        if (!_disposed)
-        {
-            OnPermanentDisconnect?.Invoke(DataStoreId);
-        }
+        OnNeedsAttention?.Invoke();
         return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
-        _heartbeatCts?.Cancel();
-        _heartbeatTimer.Dispose();
-        _heartbeatCts?.Dispose();
         await _connection.DisposeAsync();
     }
 }

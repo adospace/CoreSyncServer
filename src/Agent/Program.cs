@@ -45,6 +45,8 @@ try
         var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>().Value;
         client.BaseAddress = new Uri(options.ServerUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Add(AgentAuthHeaders.ApiKeyHeader, options.ApiKey);
+        // Fail fast when the server is unreachable so the orchestrator's tick cadence stays honest.
+        client.Timeout = TimeSpan.FromSeconds(10);
     });
 
     builder.Services.AddSingleton<IAgentSyncHandler, DefaultAgentSyncHandler>();
