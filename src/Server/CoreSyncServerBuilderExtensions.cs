@@ -102,7 +102,13 @@ public static class CoreSyncServerBuilderExtensions
             app.UseHsts();
         }
 
-        app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+        // Route the HTML "not found" page only for interactive requests. Agent endpoints
+        // (hub negotiate + /api/agent) must return their real status + body so the client
+        // can surface the actual failure instead of seeing HTML it can't parse.
+        app.UseWhen(
+            ctx => !ctx.Request.Path.StartsWithSegments(AgentAuthHeaders.HubPath)
+                   && !ctx.Request.Path.StartsWithSegments("/api/agent"),
+            branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
         app.UseHttpsRedirection();
 
         app.UseAntiforgery();
