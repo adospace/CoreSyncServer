@@ -1,0 +1,42 @@
+@* Reusable status dot for agents: green when connected, red when disconnected, gray when never seen. *@
+
+<span class="inline-flex items-center gap-1.5" title="@Tooltip">
+    <span class="size-2.5 rounded-full @DotClass"></span>
+    @if (ShowLabel)
+    {
+        <span class="text-xs font-medium @LabelClass">@Label</span>
+    }
+</span>
+
+@code {
+    [Parameter] public bool IsConnected { get; set; }
+    [Parameter] public DateTime? LastSeen { get; set; }
+    [Parameter] public bool ShowLabel { get; set; }
+
+    private string DotClass => LastSeen is null
+        ? "bg-gray-400"
+        : IsConnected ? "bg-green-500" : "bg-red-500";
+
+    private string LabelClass => LastSeen is null
+        ? "text-gray-500"
+        : IsConnected ? "text-green-700" : "text-red-700";
+
+    private string Label => LastSeen is null
+        ? "Never seen"
+        : IsConnected ? "Connected" : "Disconnected";
+
+    private string Tooltip => LastSeen is null
+        ? "Never seen"
+        : IsConnected
+            ? $"Connected — last seen {Humanize(LastSeen.Value)}"
+            : $"Disconnected — last seen {Humanize(LastSeen.Value)}";
+
+    private static string Humanize(DateTime utc)
+    {
+        var delta = DateTime.UtcNow - utc;
+        if (delta.TotalSeconds < 60) return "just now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
+        return $"{(int)delta.TotalDays}d ago";
+    }
+}

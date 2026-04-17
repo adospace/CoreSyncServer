@@ -72,6 +72,30 @@ else
                     <input type="text" @bind="_editDescription" placeholder="Optional description"
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                 </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Agent</label>
+                    <div class="flex items-center gap-3">
+                        <select @bind="_editAgentId"
+                                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors bg-white">
+                            <option value="0">— Not assigned —</option>
+                            @if (_agentOptions is not null)
+                            {
+                                @foreach (var agent in _agentOptions)
+                                {
+                                    <option value="@agent.Id">@agent.Name@(agent.Enabled ? "" : " (disabled)")</option>
+                                }
+                            }
+                        </select>
+                        @{
+                            var selected = _agentOptions?.FirstOrDefault(a => a.Id == _editAgentId);
+                        }
+                        @if (selected is not null)
+                        {
+                            <AgentStatusIndicator IsConnected="selected.IsConnected" LastSeen="selected.LastSeen" ShowLabel="true" />
+                        }
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">The agent process responsible for syncing this data store on its host machine.</p>
+                </div>
 
                 @switch (_dataStore.Type)
                 {
@@ -728,11 +752,14 @@ else
     private string _editConnectionString = "";
     private bool _showConnectionString;
     private SqlServerDataStoreTrackingMode _editTrackingMode;
+    private int _editAgentId;
     private string _savedName = "";
     private string _savedDescription = "";
     private string _savedFilePath = "";
     private string _savedConnectionString = "";
     private SqlServerDataStoreTrackingMode _savedTrackingMode;
+    private int _savedAgentId;
+    private List<AgentOptionDto>? _agentOptions;
     private bool _isSavingDetail;
     private List<string> _detailErrorMessages = [];
     private string? _detailSuccessMessage;
@@ -811,7 +838,8 @@ else
 
     private enum DataStoreType { SQLite, SqlServer, PostgreSQL }
     private enum SqlServerDataStoreTrackingMode { Triggers, ChangeTracking }
-    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode);
+    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode, int? AgentId, string? AgentName);
+    private record AgentOptionDto(int Id, string Name, bool Enabled, DateTime? LastSeen, bool IsConnected);
     private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount, bool InError);
     private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
     private record EndpointListDto(Guid Id, string Name, string? Tags, bool IsPublished, int DataStoreConfigurationId, string ConfigurationName, AuthenticationDto? Authentication);
@@ -821,7 +849,8 @@ else
         || _editDescription != _savedDescription
         || _editFilePath != _savedFilePath
         || _editConnectionString != _savedConnectionString
-        || _editTrackingMode != _savedTrackingMode;
+        || _editTrackingMode != _savedTrackingMode
+        || _editAgentId != _savedAgentId;
 
     protected override async Task OnInitializedInteractiveAsync()
     {
@@ -829,6 +858,7 @@ else
         _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/unsavedChangesGuard.js");
         await _jsModule.InvokeVoidAsync("register", _dotNetRef);
         await LoadDataStore();
+        await LoadAgents();
         await LoadConfigurations();
         await LoadEndpoints();
     }
@@ -843,7 +873,13 @@ else
             _editFilePath = _savedFilePath = _dataStore.FilePath ?? "";
             _editConnectionString = _savedConnectionString = _dataStore.ConnectionString ?? "";
             _editTrackingMode = _savedTrackingMode = _dataStore.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking;
+            _editAgentId = _savedAgentId = _dataStore.AgentId ?? 0;
         }
+    }
+
+    private async Task LoadAgents()
+    {
+        _agentOptions = await Http.GetFromJsonAsync<List<AgentOptionDto>>("api/agents?simple=true");
     }
 
     private void NavigateBack()
@@ -937,7 +973,8 @@ else
                 Description = string.IsNullOrWhiteSpace(_editDescription) ? (string?)null : _editDescription.Trim(),
                 FilePath = _dataStore!.Type == DataStoreType.SQLite ? _editFilePath.Trim() : (string?)null,
                 ConnectionString = _dataStore.Type is DataStoreType.SqlServer or DataStoreType.PostgreSQL ? _editConnectionString.Trim() : (string?)null,
-                TrackingMode = _dataStore.Type == DataStoreType.SqlServer ? _editTrackingMode : (SqlServerDataStoreTrackingMode?)null
+                TrackingMode = _dataStore.Type == DataStoreType.SqlServer ? _editTrackingMode : (SqlServerDataStoreTrackingMode?)null,
+                AgentId = _editAgentId > 0 ? _editAgentId : (int?)null
             };
 
             var response = await Http.PutAsJsonAsync($"api/datastores/{DataStoreId}", request);

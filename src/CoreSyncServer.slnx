@@ -9,6 +9,8 @@
     <Project Path="../CoreSync/src/CoreSync/CoreSync.csproj" />
   </Folder>
   <Project Path="../tests/CoreSyncServer.Tests/CoreSyncServer.Tests.csproj" />
+  <Project Path="Agent/CoreSyncServer.Agent.csproj" />
+  <Project Path="Agent.Contracts/CoreSyncServer.Agent.Contracts.csproj" />
   <Project Path="Data/CoreSyncServer.Data.csproj" Id="0b0e738f-b85f-4476-9600-6da8d2e9ca15" />
   <Project Path="Server/CoreSyncServer.csproj" />
   <Project Path="Services/CoreSyncServer.Services.csproj" />

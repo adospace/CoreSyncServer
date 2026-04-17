@@ -25,6 +25,7 @@
 		<ProjectReference Include="..\..\CoreSync\src\CoreSync.Http\CoreSync.Http.csproj" />
 		<ProjectReference Include="..\..\CoreSync\src\CoreSync\CoreSync.csproj" />
 		<ProjectReference Include="..\Data\CoreSyncServer.Data.csproj" />
+		<ProjectReference Include="..\Agent.Contracts\CoreSyncServer.Agent.Contracts.csproj" />
 	</ItemGroup>
 
 </Project>

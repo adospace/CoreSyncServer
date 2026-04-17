@@ -1,0 +1,399 @@
+@page "/agents"
+@attribute [Authorize]
+@inherits InteractivePage
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@layout DashboardLayout
+@rendermode InteractiveWebAssembly
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Agents</PageTitle>
+
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Agents</h1>
+            <p class="text-gray-500 mt-1">Manage headless agents that service data stores.</p>
+        </div>
+        <button @onclick="OpenCreateDialog"
+                class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <span class="i-lucide-plus size-4"></span>
+            New Agent
+        </button>
+    </div>
+
+    <DataGrid Loading="@(_agents is null)"
+              LoadingMessage="Loading agents..."
+              EmptyIcon="i-lucide-bot"
+              EmptyMessage="No agents found."
+              ItemCount="@(_filteredAgents?.Count() ?? 0)"
+              Pagination="@_pagination"
+              FilterPlaceholder="Search agents..."
+              FilterText="@_searchText"
+              FilterTextChanged="@HandleFilter"
+              RowClickable="true"
+              OnRefresh="@LoadAgents">
+        <QuickGrid Items="@_filteredAgents" Pagination="@_pagination" Theme="custom">
+            <TemplateColumn Title="Status" SortBy="@(GridSort<AgentDto>.ByDescending(a => a.IsConnected))">
+                <AgentStatusIndicator IsConnected="context.IsConnected" LastSeen="context.LastSeen" />
+            </TemplateColumn>
+            <TemplateColumn Title="Name" SortBy="@(GridSort<AgentDto>.ByAscending(a => a.Name))">
+                <a href="@($"/agents/{context.Id}/edit")" class="row-link text-sm font-medium text-gray-900">@context.Name</a>
+            </TemplateColumn>
+            <PropertyColumn Property="@(a => a.Description)" Title="Description" />
+            <TemplateColumn Title="Enabled" SortBy="@(GridSort<AgentDto>.ByAscending(a => a.Enabled))">
+                @if (context.Enabled)
+                {
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Enabled</span>
+                }
+                else
+                {
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Disabled</span>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Data Stores" SortBy="@(GridSort<AgentDto>.ByAscending(a => a.DataStoresCount))">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    @context.DataStoresCount
+                </span>
+            </TemplateColumn>
+            <TemplateColumn Title="Last Seen">
+                <span class="text-sm text-gray-600">
+                    @(context.LastSeen is null ? "—" : HumanizeAgo(context.LastSeen.Value))
+                </span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions" Align="Align.End">
+                <div class="flex items-center justify-end gap-1">
+                    <a href="@($"/agents/{context.Id}/edit")"
+                       class="p-2 rounded-lg text-gray-400 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                       title="Edit agent">
+                        <span class="i-lucide-pencil size-4"></span>
+                    </a>
+                    <button @onclick="() => OpenDeleteDialog(context)"
+                            class="p-2 rounded-lg text-gray-400 hover:text-ink-black-500 hover:bg-gray-100 transition-colors"
+                            title="Delete agent">
+                        <span class="i-lucide-trash-2 size-4"></span>
+                    </button>
+                </div>
+            </TemplateColumn>
+        </QuickGrid>
+    </DataGrid>
+</div>
+
+@if (_showDialog)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-md" @onclick:stopPropagation="true">
+            @if (_dialogMode == DialogMode.Delete)
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-ink-black-900 flex items-center justify-center">
+                            <span class="i-lucide-alert-triangle size-5 text-ink-black-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">Delete Agent</h2>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">
+                        This will permanently delete <strong>@_selectedAgent?.Name</strong>. Data stores assigned to this agent will become unassigned. This action cannot be undone.
+                    </p>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Type <strong>@_selectedAgent?.Name</strong> to confirm:
+                    </p>
+                    <input type="text" @bind="_deleteConfirmText" placeholder="Enter agent name"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ink-black-500 focus:border-ink-black-500 outline-none transition-colors mb-4" />
+
+                    @if (_errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                            @foreach (var error in _errorMessages)
+                            {
+                                <p class="text-sm text-ink-black-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="flex justify-end gap-3">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="DeleteAgent" disabled="@(_isSaving || _deleteConfirmText != _selectedAgent?.Name)"
+                                class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">
+                            @(_isSaving ? "Deleting..." : "Delete Agent")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                            <span class="i-lucide-bot size-5 text-dusk-blue-500"></span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">New Agent</h2>
+                    </div>
+
+                    @if (_errorMessages.Count > 0)
+                    {
+                        <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                            @foreach (var error in _errorMessages)
+                            {
+                                <p class="text-sm text-ink-black-500">@error</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input type="text" @bind="_formName" placeholder="Enter agent name"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <textarea @bind="_formDescription" placeholder="Optional description" rows="3"
+                                      class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors resize-none"></textarea>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" @bind="_formEnabled" class="sr-only peer" />
+                                <div class="w-9 h-5 bg-gray-300 peer-focus:ring-2 peer-focus:ring-dusk-blue-500 rounded-full peer peer-checked:bg-dusk-blue-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                            <span class="text-sm font-medium text-gray-700">Enabled</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @onclick="CloseDialog"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button @onclick="CreateAgent" disabled="@_isSaving"
+                                class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                            @(_isSaving ? "Creating..." : "Create")
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (_newApiKey is not null)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="DismissApiKey"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-lg" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                        <span class="i-lucide-key size-5 text-green-600"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Agent API Key</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">
+                    Copy this API key now. You can also view it later on the agent edit page.
+                </p>
+                <div class="flex items-center gap-2 mb-4">
+                    <input type="text" readonly value="@_newApiKey"
+                           class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50" />
+                    <button @onclick="CopyApiKey"
+                            class="p-2.5 rounded-lg text-gray-500 hover:text-dusk-blue-500 hover:bg-gray-100 transition-colors"
+                            title="Copy to clipboard">
+                        <span class="@(_apiKeyCopied ? "i-lucide-check size-4 text-green-500" : "i-lucide-copy size-4")"></span>
+                    </button>
+                </div>
+                <div class="flex justify-end">
+                    <button @onclick="DismissApiKey"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PaginationState _pagination = new() { ItemsPerPage = 10 };
+    private List<AgentDto>? _agents;
+    private string _searchText = "";
+    private bool _showDialog;
+    private DialogMode _dialogMode;
+    private AgentDto? _selectedAgent;
+    private bool _isSaving;
+    private List<string> _errorMessages = [];
+    private string _formName = "";
+    private string _formDescription = "";
+    private bool _formEnabled = true;
+    private string _deleteConfirmText = "";
+    private string? _newApiKey;
+    private bool _apiKeyCopied;
+    private IJSObjectReference? _clipboardModule;
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCts;
+
+    private IQueryable<AgentDto>? _filteredAgents =>
+        _agents?.Where(a =>
+            string.IsNullOrEmpty(_searchText)
+            || a.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+            || (a.Description?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false)
+        ).AsQueryable();
+
+    private record AgentDto(int Id, string Name, string? Description, bool Enabled, DateTime CreatedDate, DateTime? LastSeen, bool IsConnected, int DataStoresCount);
+    private record AgentDetailDto(int Id, string Name, string? Description, bool Enabled, DateTime CreatedDate, DateTime? LastSeen, bool IsConnected, string ApiKey);
+    private enum DialogMode { Create, Delete }
+
+    protected override async Task OnInitializedInteractiveAsync()
+    {
+        await LoadAgents();
+        _refreshCts = new CancellationTokenSource();
+        _ = RunRefreshLoop(_refreshCts.Token);
+    }
+
+    private async Task RunRefreshLoop(CancellationToken ct)
+    {
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(ct))
+            {
+                await LoadAgents();
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _refreshCts?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCts?.Dispose();
+        if (_clipboardModule is not null)
+            await _clipboardModule.DisposeAsync();
+    }
+
+    private void HandleFilter(string value) => _searchText = value;
+
+    private async Task LoadAgents()
+    {
+        _agents = await Http.GetFromJsonAsync<List<AgentDto>>("api/agents");
+    }
+
+    private void OpenCreateDialog()
+    {
+        _dialogMode = DialogMode.Create;
+        _formName = "";
+        _formDescription = "";
+        _formEnabled = true;
+        _errorMessages = [];
+        _showDialog = true;
+    }
+
+    private void OpenDeleteDialog(AgentDto agent)
+    {
+        _dialogMode = DialogMode.Delete;
+        _selectedAgent = agent;
+        _deleteConfirmText = "";
+        _errorMessages = [];
+        _showDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        _showDialog = false;
+        _selectedAgent = null;
+        _errorMessages = [];
+    }
+
+    private async Task CreateAgent()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/agents", new { Name = _formName, Description = _formDescription, Enabled = _formEnabled });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var detail = await response.Content.ReadFromJsonAsync<AgentDetailDto>();
+                CloseDialog();
+                _newApiKey = detail?.ApiKey;
+                await LoadAgents();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteAgent()
+    {
+        _isSaving = true;
+        _errorMessages = [];
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/agents/{_selectedAgent!.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDialog();
+                await LoadAgents();
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _errorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task CopyApiKey()
+    {
+        if (_newApiKey is null) return;
+        _clipboardModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/clipboard.js");
+        await _clipboardModule.InvokeVoidAsync("copyText", _newApiKey);
+        _apiKeyCopied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _apiKeyCopied = false;
+        StateHasChanged();
+    }
+
+    private void DismissApiKey()
+    {
+        _newApiKey = null;
+        _apiKeyCopied = false;
+    }
+
+    private static string HumanizeAgo(DateTime utc)
+    {
+        var delta = DateTime.UtcNow - utc;
+        if (delta.TotalSeconds < 60) return "just now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
+        return $"{(int)delta.TotalDays}d ago";
+    }
+}

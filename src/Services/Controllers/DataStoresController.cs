@@ -124,13 +124,16 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
         bool IsMonitorEnabled,
         string? FilePath,
         string? ConnectionString,
-        SqlServerDataStoreTrackingMode? TrackingMode);
+        SqlServerDataStoreTrackingMode? TrackingMode,
+        int? AgentId,
+        string? AgentName);
 
     [HttpGet("{id}")]
     public async Task<ActionResult<DataStoreDetailDto>> GetById(int id)
     {
         var dataStore = await context.DataStores
             .Include(d => d.Project)
+            .Include(d => d.Agent)
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dataStore is null) return NotFound();
@@ -146,7 +149,9 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
             (dataStore as SqliteDataStore)?.FilePath,
             (dataStore as SqlServerDataStore)?.ConnectionString
                 ?? (dataStore as PostgreSqlDataStore)?.ConnectionString,
-            (dataStore as SqlServerDataStore)?.TrackingMode));
+            (dataStore as SqlServerDataStore)?.TrackingMode,
+            dataStore.AgentId,
+            dataStore.Agent?.Name));
     }
 
     public record UpdateDataStoreRequest(
@@ -154,7 +159,8 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
         string? Description,
         string? FilePath,
         string? ConnectionString,
-        SqlServerDataStoreTrackingMode? TrackingMode);
+        SqlServerDataStoreTrackingMode? TrackingMode,
+        int? AgentId);
 
     [HttpPut("{id}")]
     public async Task<ActionResult> Update(int id, [FromBody] UpdateDataStoreRequest request)
@@ -167,6 +173,17 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
 
         dataStore.Name = request.Name.Trim();
         dataStore.Description = request.Description?.Trim();
+
+        if (request.AgentId.HasValue && request.AgentId.Value > 0)
+        {
+            if (!await context.Agents.AnyAsync(a => a.Id == request.AgentId.Value))
+                return BadRequest(new[] { "Agent not found." });
+            dataStore.AgentId = request.AgentId.Value;
+        }
+        else
+        {
+            dataStore.AgentId = null;
+        }
 
         switch (dataStore)
         {

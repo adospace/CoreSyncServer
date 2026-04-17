@@ -22,6 +22,7 @@ namespace CoreSyncServer.Data
         public DbSet<DiagnosticItem> DiagnosticItems => Set<DiagnosticItem>();
         public DbSet<SyncSession> SyncSessions => Set<SyncSession>();
         public DbSet<SyncSessionTrace> SyncSessionTraces => Set<SyncSessionTrace>();
+        public DbSet<Agent> Agents => Set<Agent>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -40,6 +41,21 @@ namespace CoreSyncServer.Data
                 .HasOne(d => d.Project)
                 .WithMany(p => p.DataStores)
                 .HasForeignKey(d => d.ProjectId);
+
+            // Configure Agent -> DataStore relationship (optional)
+            builder.Entity<DataStore>()
+                .HasOne(d => d.Agent)
+                .WithMany(a => a.DataStores)
+                .HasForeignKey(d => d.AgentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<Agent>()
+                .HasIndex(a => a.Name)
+                .IsUnique();
+
+            builder.Entity<Agent>()
+                .HasIndex(a => a.ApiKey)
+                .IsUnique();
 
             // Configure DataStore -> DataStoreConfiguration relationship
             builder.Entity<DataStoreConfiguration>()

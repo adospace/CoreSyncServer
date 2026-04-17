@@ -41,6 +41,10 @@ public abstract class DataStore
 
     public bool IsMonitorEnabled { get; set; } = true;
 
+    public int? AgentId { get; set; }
+
+    public Agent? Agent { get; set; }
+
     public IList<DataStoreConfiguration> Configurations { get; set; } = [];
 
     public IList<SyncSession> SyncSessions { get; set; } = [];

@@ -68,6 +68,11 @@ namespace CoreSyncServer.Services
 
             services.AddScoped<SyncEndpointAuthFilter>();
 
+            services.AddScoped<CoreSyncServer.Filters.AgentApiKeyAuthFilter>();
+            services.AddSingleton<IAgentConnectionTicketService, Implementation.AgentConnectionTicketService>();
+
+            services.AddSignalR();
+
             services.AddSingleton<MigrationComplete>();
             
             services.Configure<MonitorSettings>(configuration.GetRequiredSection("Monitor"));

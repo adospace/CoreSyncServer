@@ -1,3 +1,4 @@
+using CoreSyncServer.Agent.Contracts;
 using CoreSyncServer.Components;
 using CoreSyncServer.Components.Account;
 using CoreSyncServer.Data;
@@ -5,6 +6,8 @@ using CoreSyncServer.Filters;
 using CoreSyncServer.Server.Data;
 using CoreSyncServer.Server.Services;
 using CoreSyncServer.Services;
+using CoreSyncServer.Services.Authentication;
+using CoreSyncServer.Services.Hubs;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +52,10 @@ public static class CoreSyncServerBuilderExtensions
                 options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
             })
             .AddIdentityCookies();
+
+        builder.Services.AddAuthentication()
+            .AddScheme<AgentApiKeyAuthenticationOptions, AgentApiKeyAuthenticationHandler>(
+                AgentAuthHeaders.AuthenticationScheme, _ => { });
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -101,6 +108,7 @@ public static class CoreSyncServerBuilderExtensions
         app.UseAntiforgery();
 
         app.MapControllers();
+        app.MapHub<AgentHub>(AgentAuthHeaders.HubPath);
         app.MapStaticAssets();
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode()
