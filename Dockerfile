@@ -17,6 +17,7 @@ COPY src/Server/package.json src/Server/
 COPY src/Data/CoreSyncServer.Data.csproj src/Data/
 COPY src/Services/CoreSyncServer.Services.csproj src/Services/
 COPY src/WebClient/CoreSyncServer.Client.csproj src/WebClient/
+COPY src/Agent.Contracts/CoreSyncServer.Agent.Contracts.csproj src/Agent.Contracts/
 
 # Copy CoreSync submodule projects
 COPY CoreSync/src/CoreSync/CoreSync.csproj CoreSync/src/CoreSync/
