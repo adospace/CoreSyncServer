@@ -194,6 +194,20 @@ public class DataStoreConfigurationsController(
 
         if (config is null) return NotFound();
 
+        // Null DiagnosticItem FKs before deletion. Derived contexts (e.g. RtrDbContext)
+        // downgrade the SetNull cascade to NoAction because SQL Server does not allow
+        // multiple cascade paths, so the database will not clear these references for us.
+        var endpointIds = config.Endpoints.Select(e => e.Id).ToList();
+        await context.DiagnosticItems
+            .Where(d => d.DataStoreConfigurationId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DataStoreConfigurationId, (int?)null));
+        if (endpointIds.Count > 0)
+        {
+            await context.DiagnosticItems
+                .Where(d => d.EndpointId != null && endpointIds.Contains(d.EndpointId!.Value))
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.EndpointId, (Guid?)null));
+        }
+
         var authRecords = config.Endpoints.Where(e => e.Authentication is not null).Select(e => e.Authentication!);
         context.EndPointAuthentications.RemoveRange(authRecords);
         context.DataStoreConfigurations.Remove(config);
