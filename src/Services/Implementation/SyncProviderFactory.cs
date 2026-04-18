@@ -4,12 +4,18 @@ using CoreSync.PostgreSQL;
 using CoreSync.Sqlite;
 using CoreSync.SqlServer;
 using CoreSync.SqlServerCT;
+using CoreSyncServer.Agent.Contracts;
 using CoreSyncServer.Data;
+using CoreSyncServer.Services.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 
 namespace CoreSyncServer.Services.Implementation;
 
-internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncProviderFactory
+internal class SyncProviderFactory(
+    ILogger<SyncProviderFactory> logger,
+    IHubContext<AgentHub, IAgentHubClient> agentHubContext,
+    IAgentConnectionRegistry agentConnectionRegistry) : ISyncProviderFactory
 {
     private readonly ISyncLogger _syncLogger = new SyncLoggerAdapter(logger);
 
@@ -19,6 +25,18 @@ internal class SyncProviderFactory(ILogger<SyncProviderFactory> logger) : ISyncP
 
         var dataStore = configuration.DataStore
             ?? throw new InvalidOperationException("DataStore must be loaded on the configuration.");
+
+        // Agent-backed DataStore: return a proxy that forwards every ISyncProvider call
+        // over the SignalR hub to the agent process hosting the real provider.
+        if (dataStore.AgentId is not null)
+        {
+            return new AgentProxySyncProvider(
+                dataStore.Id,
+                tables,
+                agentHubContext,
+                agentConnectionRegistry,
+                effectiveLogger);
+        }
 
         var configuredTables = configuration.TableConfigurations
             .Where(t => t.SyncMode != DataStoreTableConfigurationSyncMode.NotTracked)

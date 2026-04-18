@@ -50,6 +50,7 @@ try
     });
 
     builder.Services.AddSingleton<IAgentSyncHandler, DefaultAgentSyncHandler>();
+    builder.Services.AddSingleton<AgentSyncProviderFactory>();
     builder.Services.AddSingleton<AgentOrchestrator>();
     builder.Services.AddHostedService<AgentHostedService>();
 

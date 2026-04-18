@@ -70,8 +70,20 @@ namespace CoreSyncServer.Services
 
             services.AddScoped<CoreSyncServer.Filters.AgentApiKeyAuthFilter>();
             services.AddSingleton<IAgentConnectionTicketService, Implementation.AgentConnectionTicketService>();
+            services.AddSingleton<IAgentConnectionRegistry, Implementation.AgentConnectionRegistry>();
 
-            services.AddSignalR();
+            services.AddSignalR(options =>
+            {
+                // Sync payloads carry binary blobs (byte[] columns) that easily exceed the
+                // 32 KB default. Null disables the incoming-message size check entirely.
+                options.MaximumReceiveMessageSize = null;
+
+                // Long-running server→agent RPCs (e.g. GetChanges against a large table) hold
+                // the hub invocation open far longer than the default 30s client timeout, so
+                // raise it and tighten keep-alive pings to keep the transport healthy.
+                options.ClientTimeoutInterval = TimeSpan.FromMinutes(10);
+                options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+            });
 
             services.AddSingleton<MigrationComplete>();
             

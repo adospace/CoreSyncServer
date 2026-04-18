@@ -56,7 +56,14 @@ public class AgentApiController(
                             t.Name,
                             t.Schema,
                             t.SyncMode.ToString(),
-                            t.SkipInitialSnapshot))
+                            t.Sort,
+                            t.SkipInitialSnapshot,
+                            t.SelectIncrementalQuery,
+                            t.CustomSnapshotQuery,
+                            t.SkipColumns,
+                            t.SkipColumnsOnInsertOrUpdate,
+                            t.IdentityInsert.ToString(),
+                            t.ForceReloadInsertedRecords))
                         .ToList()))
                 .ToList()))
             .ToList();

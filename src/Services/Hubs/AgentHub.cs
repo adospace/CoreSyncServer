@@ -1,26 +1,24 @@
-using System.Collections.Concurrent;
 using System.Security.Claims;
 using CoreSyncServer.Agent.Contracts;
 using CoreSyncServer.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CoreSyncServer.Services.Hubs;
 
 /// <summary>
 /// Persistent connection hub for agents. Each agent opens one HubConnection per DataStore it manages;
-/// every connection is placed into a per-DataStore group after a ticket handshake.
+/// every connection is placed into a per-DataStore group after a ticket handshake and registered in
+/// <see cref="IAgentConnectionRegistry"/> so server-initiated RPCs can target the single client.
 /// </summary>
 [Authorize(AuthenticationSchemes = AgentAuthHeaders.AuthenticationScheme)]
 public class AgentHub(
     ApplicationDbContext context,
     IAgentConnectionTicketService ticketService,
+    IAgentConnectionRegistry connectionRegistry,
     ILogger<AgentHub> logger) : Hub<IAgentHubClient>, IAgentHub
 {
-    private static readonly ConcurrentDictionary<string, int> ConnectionToDataStore = new();
-
     private int AgentId => int.Parse(Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new HubException("Missing agent identity."));
 
@@ -34,7 +32,7 @@ public class AgentHub(
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"ds-{dataStoreId}");
-        ConnectionToDataStore[Context.ConnectionId] = dataStoreId;
+        connectionRegistry.Register(dataStoreId, Context.ConnectionId);
         await TouchLastSeen();
 
         logger.LogInformation("Agent {AgentId} connected for DataStore {DataStoreId}", AgentId, dataStoreId);
@@ -58,7 +56,7 @@ public class AgentHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        ConnectionToDataStore.TryRemove(Context.ConnectionId, out _);
+        connectionRegistry.Unregister(Context.ConnectionId);
         await TouchLastSeen();
         await base.OnDisconnectedAsync(exception);
     }

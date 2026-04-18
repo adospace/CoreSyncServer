@@ -20,6 +20,7 @@ public class AgentOrchestrator(
     IServerClient serverClient,
     IOptions<AgentOptions> options,
     IAgentSyncHandler syncHandler,
+    AgentSyncProviderFactory providerFactory,
     ILoggerFactory loggerFactory,
     ILogger<AgentOrchestrator> logger)
 {
@@ -137,11 +138,15 @@ public class AgentOrchestrator(
             await existing.DisposeAsync();
         }
 
+        var connLogger = loggerFactory.CreateLogger<DataStoreConnection>();
+        var syncLogger = new AgentSyncLoggerAdapter(loggerFactory.CreateLogger($"AgentSync:{ds.Name}"));
         var conn = new DataStoreConnection(
             ds,
             options,
             syncHandler,
-            loggerFactory.CreateLogger<DataStoreConnection>());
+            providerFactory,
+            syncLogger,
+            connLogger);
 
         conn.OnNeedsAttention += TriggerWake;
 
@@ -182,11 +187,16 @@ public class AgentOrchestrator(
 
     private async Task TearDownAllAsync()
     {
-        foreach (var conn in _connections.Values)
+        // Dispose connections in parallel so total shutdown time is bounded by the slowest
+        // per-connection dispose (see DataStoreConnection.DisposeAsync for its ~2s ceiling),
+        // not the sum across all managed DataStores.
+        var tasks = _connections.Values.Select(async conn =>
         {
             try { await conn.DisposeAsync(); }
             catch (Exception ex) { logger.LogDebug(ex, "Error disposing connection for DataStore {Id}", conn.DataStoreId); }
-        }
+        });
+
+        await Task.WhenAll(tasks);
         _connections.Clear();
     }
 }

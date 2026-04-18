@@ -21,6 +21,11 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Agent.Contracts\CoreSyncServer.Agent.Contracts.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync\CoreSync.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.Sqlite\CoreSync.Sqlite.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.SqlServer\CoreSync.SqlServer.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.SqlServerCT\CoreSync.SqlServerCT.csproj" />
+		<ProjectReference Include="..\..\CoreSync\src\CoreSync.PostgreSQL\CoreSync.PostgreSQL.csproj" />
 	</ItemGroup>
 
 </Project>

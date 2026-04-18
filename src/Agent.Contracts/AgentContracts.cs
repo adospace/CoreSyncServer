@@ -38,7 +38,14 @@ public record AgentDataStoreTableDto(
     string Name,
     string? Schema,
     string SyncDirection,
-    bool SkipInitialSnapshot);
+    int Sort,
+    bool SkipInitialSnapshot,
+    string? SelectIncrementalQuery,
+    string? CustomSnapshotQuery,
+    string? SkipColumns,
+    string? SkipColumnsOnInsertOrUpdate,
+    string IdentityInsert,
+    bool ForceReloadInsertedRecords);
 
 public record SyncRequestMessage(Guid SessionId, int ConfigurationId);
 public record SyncProgressMessage(Guid SessionId, int Processed, int Total, string? CurrentTable);

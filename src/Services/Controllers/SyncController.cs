@@ -102,7 +102,11 @@ public class SyncController(
 
         if (sessionLogger is null && tables is null)
         {
-            var cacheKey = $"SyncProvider:{endpointId}";
+            // Include AgentId in the key so the cache invalidates when the DataStore is attached
+            // to or detached from an agent — otherwise a stale proxy (or stale direct provider)
+            // would keep being returned after the relationship flips.
+            var agentKeyPart = endpoint.DataStoreConfiguration!.DataStore!.AgentId?.ToString() ?? "none";
+            var cacheKey = $"SyncProvider:{endpointId}:Agent={agentKeyPart}";
             if (memoryCache.TryGetValue(cacheKey, out var cached) && cached is ISyncProvider cachedProvider)
                 return (endpoint, cachedProvider);
 
@@ -127,6 +131,10 @@ public class SyncController(
         {
             return NotFound();
         }
+        catch (AgentOfflineException ex)
+        {
+            return AgentOffline(ex);
+        }
     }
 
     [HttpGet("sync-version")]
@@ -142,6 +150,16 @@ public class SyncController(
         {
             return NotFound();
         }
+        catch (AgentOfflineException ex)
+        {
+            return AgentOffline(ex);
+        }
+    }
+
+    private ObjectResult AgentOffline(AgentOfflineException ex)
+    {
+        logger.LogWarning(ex, "Agent offline for DataStore {DataStoreId}", ex.DataStoreId);
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, ex.Message);
     }
 
     [HttpGet("changes-bulk/{storeId:guid}")]
@@ -191,6 +209,10 @@ public class SyncController(
         catch (KeyNotFoundException)
         {
             return NotFound();
+        }
+        catch (AgentOfflineException ex)
+        {
+            return AgentOffline(ex);
         }
     }
 
@@ -332,6 +354,12 @@ public class SyncController(
                 await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
                 return NotFound();
             }
+            catch (AgentOfflineException ex)
+            {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                return AgentOffline(ex);
+            }
             catch (Exception ex)
             {
                 await sessionLogger.FlushAsync(cancellationToken);
@@ -371,6 +399,12 @@ public class SyncController(
                 await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
                 return NotFound();
             }
+            catch (AgentOfflineException ex)
+            {
+                await sessionLogger.FlushAsync(cancellationToken);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                return AgentOffline(ex);
+            }
             catch (Exception ex)
             {
                 await sessionLogger.FlushAsync(cancellationToken);
@@ -397,6 +431,10 @@ public class SyncController(
         catch (KeyNotFoundException)
         {
             return NotFound();
+        }
+        catch (AgentOfflineException ex)
+        {
+            return AgentOffline(ex);
         }
     }
 
