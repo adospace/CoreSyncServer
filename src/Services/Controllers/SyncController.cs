@@ -19,10 +19,12 @@ namespace CoreSyncServer.Controllers;
 [AllowAnonymous]
 [Route("api/sync/{endpointId:guid}")]
 [ServiceFilter(typeof(SyncEndpointAuthFilter))]
+[ServiceFilter(typeof(SyncConfigurationExceptionFilter))]
 public class SyncController(
     ApplicationDbContext context,
     ISyncProviderFactory syncProviderFactory,
     ISyncSessionService syncSessionService,
+    ISyncProviderCache syncProviderCache,
     IMemoryCache memoryCache,
     ILogger<SyncController> logger) : ControllerBase
 {
@@ -106,12 +108,11 @@ public class SyncController(
             // to or detached from an agent — otherwise a stale proxy (or stale direct provider)
             // would keep being returned after the relationship flips.
             var agentKeyPart = endpoint.DataStoreConfiguration!.DataStore!.AgentId?.ToString() ?? "none";
-            var cacheKey = $"SyncProvider:{endpointId}:Agent={agentKeyPart}";
-            if (memoryCache.TryGetValue(cacheKey, out var cached) && cached is ISyncProvider cachedProvider)
+            if (syncProviderCache.TryGet(endpointId, agentKeyPart, out var cachedProvider))
                 return (endpoint, cachedProvider);
 
             var provider = syncProviderFactory.CreateSyncProvider(endpoint.DataStoreConfiguration!);
-            memoryCache.Set(cacheKey, provider);
+            syncProviderCache.Set(endpointId, agentKeyPart, provider);
             return (endpoint, provider);
         }
 

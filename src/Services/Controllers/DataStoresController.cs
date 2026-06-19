@@ -1,4 +1,5 @@
 using CoreSyncServer.Data;
+using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace CoreSyncServer.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class DataStoresController(ApplicationDbContext context) : ControllerBase
+public class DataStoresController(ApplicationDbContext context, ISyncProviderCache syncProviderCache) : ControllerBase
 {
     public record DataStoreDto(
         int Id,
@@ -271,6 +272,10 @@ public class DataStoresController(ApplicationDbContext context) : ControllerBase
 
         endpoint.IsPublished = request.IsPublished;
         await context.SaveChangesAsync();
+
+        // Drop any cached sync provider so the next sync rebuilds it from the current configuration
+        // (the table config can only change while unpublished, so this toggle is the safe seam).
+        syncProviderCache.Invalidate(endpointId);
 
         return NoContent();
     }

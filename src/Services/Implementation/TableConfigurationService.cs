@@ -50,15 +50,16 @@ public class TableConfigurationService(
         {
             sortOrder++;
             var key = (schemaTable.Schema?.ToLowerInvariant(), schemaTable.Name.ToLowerInvariant());
-            var hasPrimaryKey = schemaTable.Columns.Any(c => c.IsPrimaryKey);
 
-            var hasError = !hasPrimaryKey;
             var messages = new List<string>();
-            if (!hasPrimaryKey)
+            var pkError = ValidatePrimaryKey(schemaTable);
+            if (pkError is not null)
             {
-                messages.Add("Primary key missing (required for sync)");
-                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{schemaTable.Name}] Primary key missing (required for sync)"));
+                messages.Add(pkError);
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{schemaTable.Name}] {pkError}"));
             }
+
+            var hasError = messages.Count > 0;
 
             if (existing.TryGetValue(key, out var existingTable))
             {
@@ -161,16 +162,16 @@ public class TableConfigurationService(
                 continue;
             }
 
-            var hasPrimaryKey = schemaTable.Columns.Any(c => c.IsPrimaryKey);
             var newSort = sortLookup[key];
             var messages = new List<string>();
             var hasError = false;
 
-            if (!hasPrimaryKey)
+            var pkError = ValidatePrimaryKey(schemaTable);
+            if (pkError is not null)
             {
                 hasError = true;
-                messages.Add("Primary key missing (required for sync)");
-                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Primary key missing (required for sync)"));
+                messages.Add(pkError);
+                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] {pkError}"));
             }
 
             if (table.Sort != newSort)
@@ -286,6 +287,19 @@ public class TableConfigurationService(
             if (!unresolvedSet.Contains(diagnostic.Message))
                 await diagnosticService.CreateAsync(diagnostic, cancellationToken);
         }
+    }
+
+    // Sync requires exactly one primary key column per table; the SqlSyncProvider throws at
+    // sync time otherwise. Surface both problems here so the table is flagged in the UI instead.
+    private static string? ValidatePrimaryKey(TableSchema schemaTable)
+    {
+        var primaryKeyColumnCount = schemaTable.Columns.Count(c => c.IsPrimaryKey);
+        return primaryKeyColumnCount switch
+        {
+            0 => "Primary key missing (required for sync)",
+            > 1 => "Composite primary key not supported (a single-column primary key is required)",
+            _ => null
+        };
     }
 
     private static DiagnosticItem BuildDiagnostic(DataStoreConfiguration config, string message) => new()

@@ -54,6 +54,7 @@ namespace CoreSyncServer.Services
             services.AddScoped<ITableConfigurationService, TableConfigurationService>();
             services.AddScoped<IDiagnosticService, DiagnosticService>();
             services.AddScoped<ISyncSessionService, SyncSessionService>();
+            services.AddSingleton<ISyncProviderCache, SyncProviderCache>();
             services.AddScoped<IProvisionService, ProvisionService>();
             services.AddSingleton<MonitorTask, ConnectivityMonitorTask>();
             services.AddSingleton<MonitorTask, SchemaUpdateMonitorTask>();
@@ -67,6 +68,7 @@ namespace CoreSyncServer.Services
             services.AddScoped<ISyncEndpointAuthService, SyncEndpointAuthService>();
 
             services.AddScoped<SyncEndpointAuthFilter>();
+            services.AddScoped<CoreSyncServer.Filters.SyncConfigurationExceptionFilter>();
 
             services.AddScoped<CoreSyncServer.Filters.AgentApiKeyAuthFilter>();
             services.AddSingleton<IAgentConnectionTicketService, Implementation.AgentConnectionTicketService>();
