@@ -12,9 +12,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.2" />
-		<PackageReference Include="MessagePack" Version="2.5.187" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
+		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
+		<PackageReference Include="MessagePack" Version="3.1.7" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
 	</ItemGroup>
 
 	<ItemGroup>
