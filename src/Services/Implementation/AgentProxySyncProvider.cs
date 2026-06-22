@@ -15,6 +15,14 @@ namespace CoreSyncServer.Services.Implementation;
 /// </summary>
 internal sealed class AgentProxySyncProvider : ISyncProvider
 {
+    /// <summary>
+    /// Upper bound on how long any single agent RPC may run before we give up. Without this the
+    /// call hangs until the hosting platform tears down the idle socket (e.g. Azure's ~230s load
+    /// balancer timeout), surfacing as an opaque cancellation far from the real cause. Failing
+    /// here instead yields a meaningful <see cref="AgentOfflineException"/>.
+    /// </summary>
+    private static readonly TimeSpan RpcTimeout = TimeSpan.FromSeconds(120);
+
     private readonly int _dataStoreId;
     private readonly string[]? _tables;
     private readonly IHubContext<AgentHub, IAgentHubClient> _hubContext;
@@ -42,7 +50,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         var client = ResolveClient();
         try
         {
-            return await client.SyncGetStoreId(_tables);
+            return await client.SyncGetStoreId(_tables).WaitAsync(RpcTimeout, cancellationToken);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
@@ -55,7 +63,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         var client = ResolveClient();
         try
         {
-            return await client.SyncGetSyncVersion(_tables);
+            return await client.SyncGetSyncVersion(_tables).WaitAsync(RpcTimeout, cancellationToken);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
@@ -74,7 +82,8 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         var client = ResolveClient();
         try
         {
-            var changeSet = await client.SyncGetChanges(otherStoreId, syncFilterParameters, syncDirection, effectiveTables);
+            var changeSet = await client.SyncGetChanges(otherStoreId, syncFilterParameters, syncDirection, effectiveTables)
+                .WaitAsync(RpcTimeout, cancellationToken);
             // SignalR's JSON protocol hands us JsonElement for object-typed fields; downstream
             // MessagePack serialization (used by the HTTP chunking path) can't handle those.
             SyncPayloadConverter.NormalizeChangeSet(changeSet);
@@ -101,7 +110,8 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         var client = ResolveClient();
         try
         {
-            return await client.SyncApplyChanges(changeSet, updateResolution, deleteResolution, _tables);
+            return await client.SyncApplyChanges(changeSet, updateResolution, deleteResolution, _tables)
+                .WaitAsync(RpcTimeout, cancellationToken);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
@@ -114,7 +124,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         var client = ResolveClient();
         try
         {
-            await client.SyncSaveVersionForStore(otherStoreId, version, _tables);
+            await client.SyncSaveVersionForStore(otherStoreId, version, _tables).WaitAsync(RpcTimeout, cancellationToken);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {

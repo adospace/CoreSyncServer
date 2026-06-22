@@ -202,8 +202,12 @@ public class SyncController(
             }
             catch (Exception ex) when (ex is not KeyNotFoundException)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(session.Id, ex.Message, cancellationToken);
+                // Cleanup must run on a fresh token: if the request was cancelled (e.g. the client
+                // or platform aborted the connection during a long agent RPC), reusing the dead
+                // token here makes SaveChangesAsync throw TaskCanceledException and the real error
+                // is never recorded against the session.
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(session.Id, ex.Message, CancellationToken.None);
                 throw;
             }
         }
@@ -351,20 +355,21 @@ public class SyncController(
             }
             catch (KeyNotFoundException)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
+                // Cleanup on CancellationToken.None — see GetBulkChangeSet for the rationale.
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", CancellationToken.None);
                 return NotFound();
             }
             catch (AgentOfflineException ex)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, CancellationToken.None);
                 return AgentOffline(ex);
             }
             catch (Exception ex)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, CancellationToken.None);
                 throw;
             }
         }
@@ -396,20 +401,21 @@ public class SyncController(
             }
             catch (KeyNotFoundException)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", cancellationToken);
+                // Cleanup on CancellationToken.None — see GetBulkChangeSet for the rationale.
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", CancellationToken.None);
                 return NotFound();
             }
             catch (AgentOfflineException ex)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, CancellationToken.None);
                 return AgentOffline(ex);
             }
             catch (Exception ex)
             {
-                await sessionLogger.FlushAsync(cancellationToken);
-                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, cancellationToken);
+                await sessionLogger.FlushAsync(CancellationToken.None);
+                await syncSessionService.ErrorAsync(cached.SyncSessionId, ex.Message, CancellationToken.None);
                 throw;
             }
         }
