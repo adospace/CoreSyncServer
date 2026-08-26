@@ -20,6 +20,17 @@ public class ProvisionController(IProvisionService provisionService) : Controlle
         return NoContent();
     }
 
+    [HttpPost("{dataStoreId}/change-retention")]
+    public async Task<ActionResult<ChangeRetentionResult>> ApplyChangeRetention(int dataStoreId)
+    {
+        var result = await provisionService.ApplyChangeRetentionAsync(dataStoreId);
+
+        if (!result.Success)
+            return BadRequest(new[] { result.Error });
+
+        return Ok(result);
+    }
+
     [HttpPost("{dataStoreId}/remove")]
     public async Task<ActionResult> Remove(int dataStoreId)
     {

@@ -1,3 +1,4 @@
+using CoreSync.SqlServerCT;
 using CoreSyncServer.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,33 @@ internal class ProvisionService(
         catch (Exception ex)
         {
             return ProvisionResult.Fail($"Failed to remove provision: {ex.Message}");
+        }
+    }
+
+    public async Task<ChangeRetentionResult> ApplyChangeRetentionAsync(int dataStoreId)
+    {
+        // Deliberately not requiring any tracked tables: retention is a database-level setting and has
+        // to be adjustable before, or independently of, provisioning the tables themselves.
+        var configuration = await BuildMergedConfigurationAsync(dataStoreId);
+        if (configuration is null)
+            return ChangeRetentionResult.Fail("Data store not found.");
+
+        if (configuration.DataStore is not SqlServerDataStore { TrackingMode: SqlServerDataStoreTrackingMode.ChangeTracking })
+            return ChangeRetentionResult.Fail("Change retention applies only to SQL Server data stores using native change tracking.");
+
+        try
+        {
+            if (syncProviderFactory.CreateSyncProvider(configuration) is not SqlServerCTProvider provider)
+            {
+                return ChangeRetentionResult.Fail(
+                    "Change retention cannot be applied from the server for an agent-backed data store. Re-provision the data store through its agent instead.");
+            }
+
+            return ChangeRetentionResult.Ok(await provider.ApplyChangeRetentionAsync());
+        }
+        catch (Exception ex)
+        {
+            return ChangeRetentionResult.Fail($"Failed to apply change retention: {ex.Message}");
         }
     }
 

@@ -1,4 +1,4 @@
-@page "/data-stores/{DataStoreId:int}/edit"
+﻿@page "/data-stores/{DataStoreId:int}/edit"
 @attribute [Authorize]
 @inherits InteractivePage
 @implements IAsyncDisposable
@@ -133,6 +133,15 @@ else
                                 <option value="@SqlServerDataStoreTrackingMode.Triggers">Triggers</option>
                             </select>
                         </div>
+                        @if (_editTrackingMode == SqlServerDataStoreTrackingMode.ChangeTracking)
+                        {
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Change Retention (days)</label>
+                                <input type="number" min="1" max="365" @bind="_editChangeRetentionDays"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                                <p class="mt-1 text-xs text-gray-500">How long change history is kept. A client offline longer than this must reset its local database and re-sync from scratch. Longer retention grows the change tracking side tables.</p>
+                            </div>
+                        }
                         break;
 
                     case DataStoreType.PostgreSQL:
@@ -752,12 +761,14 @@ else
     private string _editConnectionString = "";
     private bool _showConnectionString;
     private SqlServerDataStoreTrackingMode _editTrackingMode;
+    private int _editChangeRetentionDays = DefaultChangeRetentionDays;
     private int _editAgentId;
     private string _savedName = "";
     private string _savedDescription = "";
     private string _savedFilePath = "";
     private string _savedConnectionString = "";
     private SqlServerDataStoreTrackingMode _savedTrackingMode;
+    private int _savedChangeRetentionDays = DefaultChangeRetentionDays;
     private int _savedAgentId;
     private List<AgentOptionDto>? _agentOptions;
     private bool _isSavingDetail;
@@ -838,8 +849,12 @@ else
 
     private enum DataStoreType { SQLite, SqlServer, PostgreSQL }
     private enum SqlServerDataStoreTrackingMode { Triggers, ChangeTracking }
-    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode, int? AgentId, string? AgentName);
+
+    private const int DefaultChangeRetentionDays = 30;
+
+    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode, int? ChangeRetentionDays, int? AgentId, string? AgentName);
     private record AgentOptionDto(int Id, string Name, bool Enabled, DateTime? LastSeen, bool IsConnected);
+    private record ChangeRetentionResultDto(bool Success, string? Error, int? EffectiveRetention, string? EffectiveRetentionUnit, bool? EffectiveAutoCleanup);
     private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount, bool InError);
     private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
     private record EndpointListDto(Guid Id, string Name, string? Tags, bool IsPublished, int DataStoreConfigurationId, string ConfigurationName, AuthenticationDto? Authentication);
@@ -850,6 +865,7 @@ else
         || _editFilePath != _savedFilePath
         || _editConnectionString != _savedConnectionString
         || _editTrackingMode != _savedTrackingMode
+        || _editChangeRetentionDays != _savedChangeRetentionDays
         || _editAgentId != _savedAgentId;
 
     protected override async Task OnInitializedInteractiveAsync()
@@ -873,7 +889,32 @@ else
             _editFilePath = _savedFilePath = _dataStore.FilePath ?? "";
             _editConnectionString = _savedConnectionString = _dataStore.ConnectionString ?? "";
             _editTrackingMode = _savedTrackingMode = _dataStore.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking;
+            _editChangeRetentionDays = _savedChangeRetentionDays = _dataStore.ChangeRetentionDays ?? DefaultChangeRetentionDays;
             _editAgentId = _savedAgentId = _dataStore.AgentId ?? 0;
+        }
+    }
+
+    private async Task ApplyChangeRetention()
+    {
+        var response = await Http.PostAsJsonAsync($"api/provision/{DataStoreId}/change-retention", new { });
+
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<ChangeRetentionResultDto>();
+
+            _detailSuccessMessage = result?.EffectiveRetention is null
+                ? "Data store updated successfully. Change tracking is not enabled on this database, so no retention is in effect."
+                : $"Data store updated successfully. Change retention on the database is now {result.EffectiveRetention} {result.EffectiveRetentionUnit?.ToLowerInvariant()}"
+                  + $", auto cleanup {(result.EffectiveAutoCleanup == true ? "on" : "off")}.";
+        }
+        else
+        {
+            var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+
+            // The value is saved either way - be explicit that the database was not changed, rather
+            // than letting a green "updated successfully" imply it was.
+            _detailSuccessMessage = null;
+            _detailErrorMessages = errors ?? ["The setting was saved but could not be applied to the database."];
         }
     }
 
@@ -974,6 +1015,7 @@ else
                 FilePath = _dataStore!.Type == DataStoreType.SQLite ? _editFilePath.Trim() : (string?)null,
                 ConnectionString = _dataStore.Type is DataStoreType.SqlServer or DataStoreType.PostgreSQL ? _editConnectionString.Trim() : (string?)null,
                 TrackingMode = _dataStore.Type == DataStoreType.SqlServer ? _editTrackingMode : (SqlServerDataStoreTrackingMode?)null,
+                ChangeRetentionDays = _dataStore.Type == DataStoreType.SqlServer ? _editChangeRetentionDays : (int?)null,
                 AgentId = _editAgentId > 0 ? _editAgentId : (int?)null
             };
 
@@ -982,7 +1024,21 @@ else
             if (response.IsSuccessStatusCode)
             {
                 _detailSuccessMessage = "Data store updated successfully.";
+
+                var retentionChanged = _editChangeRetentionDays != _savedChangeRetentionDays;
+
                 await LoadDataStore();
+
+                // Storing the value changes nothing on a database that already has change tracking on,
+                // so the ALTER DATABASE has to be issued explicitly and its outcome reported. A setting
+                // that looks saved but was never applied is how a database quietly keeps a week of
+                // history when it was configured for a month.
+                if (retentionChanged
+                    && _dataStore?.Type == DataStoreType.SqlServer
+                    && _editTrackingMode == SqlServerDataStoreTrackingMode.ChangeTracking)
+                {
+                    await ApplyChangeRetention();
+                }
             }
             else
             {

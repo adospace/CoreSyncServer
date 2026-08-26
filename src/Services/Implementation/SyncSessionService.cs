@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CoreSyncServer.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,22 @@ internal class SyncSessionService(
             .Where(s => s.Id == sessionId)
             .Select(s => new { s.DataStoreId })
             .FirstAsync(cancellationToken);
+
+        // A failed session has to carry its reason in its own traces. Some failures - an anchor that
+        // has aged out of the change retention window is the usual one - are raised before the
+        // per-table trace loop starts, so the session's trace list would otherwise be a single
+        // "Begin GetChanges" line and Status = Error, saying nothing about what went wrong. The
+        // message reaches DiagnosticItems either way, but nothing leads there from the session
+        // detail view, which is where anyone investigating a failed session looks first.
+        context.SyncSessionTraces.Add(new SyncSessionTrace
+        {
+            SyncSessionId = sessionId,
+            Message = errorMessage,
+            TimeStamp = DateTime.UtcNow,
+            TraceLevel = TraceLevel.Error
+        });
+
+        await context.SaveChangesAsync(cancellationToken);
 
         await diagnosticService.CreateAsync(new DiagnosticItem
         {
