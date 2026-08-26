@@ -58,13 +58,29 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
         int ProjectId,
         string? FilePath,
         string? ConnectionString,
-        SqlServerDataStoreTrackingMode? TrackingMode);
+        SqlServerDataStoreTrackingMode? TrackingMode,
+        int? ChangeRetentionDays);
+
+    /// <summary>
+    /// The widest change retention the UI accepts. SQL Server itself allows more, but a window this
+    /// long already means unbounded growth of the change tracking side tables, so a value beyond it
+    /// is far more likely to be a typo than an intention.
+    /// </summary>
+    private const int MaxChangeRetentionDays = 365;
+
+    private static string? ValidateChangeRetentionDays(int? days)
+        => days is null || (days >= 1 && days <= MaxChangeRetentionDays)
+            ? null
+            : $"Change retention must be between 1 and {MaxChangeRetentionDays} days.";
 
     [HttpPost]
     public async Task<ActionResult<DataStoreDto>> Create([FromBody] CreateDataStoreRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new[] { "Name is required." });
+
+        if (ValidateChangeRetentionDays(request.ChangeRetentionDays) is { } retentionError)
+            return BadRequest(new[] { retentionError });
 
         var project = await context.Projects.FindAsync(request.ProjectId);
         if (project is null)
@@ -87,7 +103,8 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
                 ProjectId = request.ProjectId,
                 Type = DataStoreType.SqlServer,
                 ConnectionString = request.ConnectionString ?? "",
-                TrackingMode = request.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking
+                TrackingMode = request.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking,
+                ChangeRetentionDays = request.ChangeRetentionDays ?? SqlServerDataStore.DefaultChangeRetentionDays
             },
             DataStoreType.PostgreSQL => new PostgreSqlDataStore
             {
@@ -126,6 +143,7 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
         string? FilePath,
         string? ConnectionString,
         SqlServerDataStoreTrackingMode? TrackingMode,
+        int? ChangeRetentionDays,
         int? AgentId,
         string? AgentName);
 
@@ -151,6 +169,7 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
             (dataStore as SqlServerDataStore)?.ConnectionString
                 ?? (dataStore as PostgreSqlDataStore)?.ConnectionString,
             (dataStore as SqlServerDataStore)?.TrackingMode,
+            (dataStore as SqlServerDataStore)?.ChangeRetentionDays,
             dataStore.AgentId,
             dataStore.Agent?.Name));
     }
@@ -161,6 +180,7 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
         string? FilePath,
         string? ConnectionString,
         SqlServerDataStoreTrackingMode? TrackingMode,
+        int? ChangeRetentionDays,
         int? AgentId);
 
     [HttpPut("{id}")]
@@ -168,6 +188,9 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new[] { "Name is required." });
+
+        if (ValidateChangeRetentionDays(request.ChangeRetentionDays) is { } retentionError)
+            return BadRequest(new[] { retentionError });
 
         var dataStore = await context.DataStores.FindAsync(id);
         if (dataStore is null) return NotFound();
@@ -197,6 +220,8 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
                     sqlServer.ConnectionString = request.ConnectionString.Trim();
                 if (request.TrackingMode.HasValue)
                     sqlServer.TrackingMode = request.TrackingMode.Value;
+                if (request.ChangeRetentionDays.HasValue)
+                    sqlServer.ChangeRetentionDays = request.ChangeRetentionDays.Value;
                 break;
             case PostgreSqlDataStore postgres:
                 if (request.ConnectionString is not null)

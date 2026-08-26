@@ -93,6 +93,11 @@ internal class SyncProviderFactory(
     {
         var builder = new SqlServerCTSyncConfigurationBuilder(dataStore.GetResolvedConnectionString());
 
+        // Setting this explicitly is what makes provisioning reconcile the retention on a database
+        // that already has change tracking enabled. Left unset, the stored value would apply only to
+        // databases being provisioned for the first time and silently do nothing everywhere else.
+        builder.ChangeRetention(dataStore.ChangeRetentionDays);
+
         foreach (var table in tables)
         {
             builder.Table(table.Name,

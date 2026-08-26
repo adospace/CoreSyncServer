@@ -1,4 +1,4 @@
-@page "/data-store/{TypeName}/new/{ProjectId:int}/{EncodedName}"
+﻿@page "/data-store/{TypeName}/new/{ProjectId:int}/{EncodedName}"
 @attribute [Authorize]
 @inherits InteractivePage
 @inject NavigationManager NavigationManager
@@ -155,6 +155,16 @@
                             </div>
                         </label>
                     </div>
+
+                    @if (_trackingMode == SqlServerTrackingMode.ChangeTracking)
+                    {
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Change Retention (days)</label>
+                            <input type="number" min="1" max="365" @bind="_changeRetentionDays"
+                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
+                            <p class="mt-1 text-xs text-gray-500">How long change history is kept. A client offline longer than this must reset its local database and re-sync from scratch. Longer retention grows the change tracking side tables.</p>
+                        </div>
+                    }
                 </div>
             }
 
@@ -214,12 +224,15 @@
     private enum DataStoreType { SQLite, SqlServer, PostgreSQL }
     private enum SqlServerTrackingMode { Triggers, ChangeTracking }
 
+    private const int DefaultChangeRetentionDays = 30;
+
     private DataStoreType _type;
     private string _name = "";
     private string _description = "";
     private string _filePath = "";
     private string _connectionString = "";
     private SqlServerTrackingMode _trackingMode = SqlServerTrackingMode.ChangeTracking;
+    private int _changeRetentionDays = DefaultChangeRetentionDays;
     private bool _isSaving;
     private List<string> _errorMessages = [];
     private string[] _steps = [];
@@ -251,6 +264,8 @@
         0 => !string.IsNullOrWhiteSpace(_name),
         1 when _type == DataStoreType.SQLite => !string.IsNullOrWhiteSpace(_filePath),
         1 => !string.IsNullOrWhiteSpace(_connectionString),
+        2 when _type == DataStoreType.SqlServer && _trackingMode == SqlServerTrackingMode.ChangeTracking
+            => _changeRetentionDays >= 1 && _changeRetentionDays <= 365,
         _ => true
     };
 
@@ -283,7 +298,8 @@
                 ProjectId,
                 FilePath = _type == DataStoreType.SQLite ? _filePath.Trim() : null,
                 ConnectionString = _type != DataStoreType.SQLite ? _connectionString.Trim() : null,
-                TrackingMode = _type == DataStoreType.SqlServer ? (int?)_trackingMode : null
+                TrackingMode = _type == DataStoreType.SqlServer ? (int?)_trackingMode : null,
+                ChangeRetentionDays = _type == DataStoreType.SqlServer ? (int?)_changeRetentionDays : null
             };
 
             var response = await Http.PostAsJsonAsync("api/datastores", request);
