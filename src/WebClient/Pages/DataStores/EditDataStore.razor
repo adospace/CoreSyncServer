@@ -7,6 +7,7 @@
 @layout DashboardLayout
 @rendermode InteractiveWebAssembly
 @using Microsoft.AspNetCore.Authorization
+@using System.Text.Json
 
 <PageTitle>Edit Data Store</PageTitle>
 
@@ -47,6 +48,20 @@ else
                         <span class="i-lucide-database-zap size-4"></span>
                         Remove Provision
                     </button>
+                    <div class="h-8 w-px bg-gray-200"></div>
+                    <button @onclick="ExportConfigurations" disabled="@_isExporting"
+                            title="Download all configurations, tables and endpoints as JSON"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                        <span class="i-lucide-download size-4"></span>
+                        @(_isExporting ? "Exporting..." : "Export")
+                    </button>
+                    <label for="importDataStoreFileInput"
+                           title="Import configurations from a data store export"
+                           class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 cursor-pointer">
+                        <span class="i-lucide-upload size-4"></span>
+                        Import
+                    </label>
+                    <InputFile OnChange="OnImportFileSelected" accept=".json" id="importDataStoreFileInput" class="hidden" />
                     <div class="h-8 w-px bg-gray-200"></div>
                     <button @onclick="SaveDataStore" disabled="@(!HasUnsavedChanges || !IsDetailFormValid() || _isSavingDetail)"
                             class="bg-dusk-blue-500 hover:bg-dusk-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
@@ -482,6 +497,109 @@ else
     </div>
 }
 
+@* Import configurations dialog *@
+@if (_showImportDialog && _importDocument is not null)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseImportDialog"></div>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded border border-gray-200 w-full max-w-lg" @onclick:stopPropagation="true">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-lg bg-dusk-blue-900 flex items-center justify-center">
+                        <span class="i-lucide-upload size-5 text-dusk-blue-500"></span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Import Configurations</h2>
+                </div>
+
+                <p class="text-sm text-gray-600 mb-4">
+                    Exported from <strong>@_importDocument.DataStore.Name</strong>
+                    (@GetTypeLabel(_importDocument.DataStore.Type)) on @_importDocument.ExportedAt.ToLocalTime().ToString("g").
+                </p>
+
+                @if (_importDocument.DataStore.Type != _dataStore!.Type)
+                {
+                    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                        <span class="i-lucide-alert-triangle size-4 text-amber-600 mt-0.5 shrink-0"></span>
+                        <p class="text-sm text-amber-700">
+                            The export comes from a @GetTypeLabel(_importDocument.DataStore.Type) data store but this one is @GetTypeLabel(_dataStore.Type).
+                            Provider-specific table settings may not apply.
+                        </p>
+                    </div>
+                }
+
+                <p class="text-sm text-gray-600 mb-2">
+                    Each configuration is created as a new one. A name already in use on this data store must be changed before importing.
+                </p>
+
+                <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4 max-h-72 overflow-y-auto">
+                    @foreach (var item in _importPreview)
+                    {
+                        var problem = GetImportNameProblem(item);
+                        <div class="px-4 py-3 space-y-1.5">
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-xs text-gray-500 truncate">
+                                    Exported as <strong class="text-gray-700">@item.ExportedName</strong>
+                                    <span class="text-gray-400">v@(item.Version)</span>
+                                    &middot; @item.TableCount table(s)@(_importIncludeEndpoints ? $", {item.EndpointCount} endpoint(s)" : "")
+                                </p>
+                                @if (problem is null)
+                                {
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 shrink-0">New</span>
+                                }
+                                else
+                                {
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 shrink-0">
+                                        <span class="i-lucide-alert-triangle size-3"></span>
+                                        @problem
+                                    </span>
+                                }
+                            </div>
+                            <input type="text" @bind="item.Name" @bind:event="oninput" placeholder="Configuration name"
+                                   class="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 outline-none transition-colors @(problem is null ? "border-gray-300 focus:ring-dusk-blue-500 focus:border-dusk-blue-500" : "border-red-400 focus:ring-red-500 focus:border-red-500")" />
+                        </div>
+                    }
+                </div>
+
+                <label class="flex items-start gap-2 mb-4 cursor-pointer">
+                    <input type="checkbox" @bind="_importIncludeEndpoints" class="mt-0.5 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                    <span class="text-sm text-gray-700">
+                        Include endpoints
+                        <span class="block text-xs text-gray-500">Created unpublished with new IDs.</span>
+                    </span>
+                </label>
+
+                @if (_importPreview.Any(i => GetImportNameProblem(i) is not null))
+                {
+                    <p class="text-sm text-red-600 mb-4">
+                        Type a new name for the configurations flagged above to enable the import.
+                    </p>
+                }
+
+                @if (_importErrorMessages.Count > 0)
+                {
+                    <div class="mb-4 p-3 bg-ink-black-900 border border-ink-black-700 rounded-lg">
+                        @foreach (var error in _importErrorMessages)
+                        {
+                            <p class="text-sm text-ink-black-500">@error</p>
+                        }
+                    </div>
+                }
+
+                <div class="flex justify-end gap-3">
+                    <button @onclick="CloseImportDialog"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button @onclick="ConfirmImport" disabled="@(_isImporting || _importPreview.Any(i => GetImportNameProblem(i) is not null))"
+                            class="px-4 py-2 text-sm font-medium text-white bg-dusk-blue-500 hover:bg-dusk-blue-600 rounded-lg transition-colors disabled:opacity-50">
+                        @(_isImporting ? "Importing..." : "Import")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @* Create/Edit endpoint dialog *@
 @if (_showEndpointDialog)
 {
@@ -716,6 +834,29 @@ else
     </div>
 }
 
+@* Export/import result toast *@
+@if (_transferSuccessMessage is not null)
+{
+    <div class="fixed bottom-4 right-4 z-50 p-4 bg-green-100 border border-green-300 rounded-lg shadow-lg flex items-center gap-2">
+        <span class="i-lucide-check-circle size-5 text-green-600"></span>
+        <span class="text-sm text-green-800">@_transferSuccessMessage</span>
+        <button @onclick="() => _transferSuccessMessage = null" class="ml-2 text-green-600 hover:text-green-800">
+            <span class="i-lucide-x size-4"></span>
+        </button>
+    </div>
+}
+
+@if (_transferErrorMessages.Count > 0 && !_showImportDialog)
+{
+    <div class="fixed bottom-4 right-4 z-50 p-4 bg-red-100 border border-red-300 rounded-lg shadow-lg flex items-center gap-2">
+        <span class="i-lucide-alert-circle size-5 text-red-600"></span>
+        <span class="text-sm text-red-800">@string.Join(" ", _transferErrorMessages)</span>
+        <button @onclick="() => _transferErrorMessages = []" class="ml-2 text-red-600 hover:text-red-800">
+            <span class="i-lucide-x size-4"></span>
+        </button>
+    </div>
+}
+
 @* Unsaved changes dialog *@
 @if (_showUnsavedDialog)
 {
@@ -797,6 +938,18 @@ else
     private ConfigurationListDto? _selectedConfig;
     private string _deleteConfirmText = "";
 
+    // Export / import
+    private IJSObjectReference? _downloadModule;
+    private bool _isExporting;
+    private bool _showImportDialog;
+    private bool _isImporting;
+    private bool _importIncludeEndpoints;
+    private DataStoreExportDocument? _importDocument;
+    private List<ImportPreviewItem> _importPreview = [];
+    private List<string> _importErrorMessages = [];
+    private string? _transferSuccessMessage;
+    private List<string> _transferErrorMessages = [];
+
     // Provision
     private bool _isProvisioning;
     private bool _showRemoveProvisionDialog;
@@ -858,6 +1011,27 @@ else
     private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount, bool InError);
     private record AuthenticationDto(int Type, string? Username, string? Password, string? ApiKey, string? JwksEndpoint, string? Issuer, string? UserIdClaim, string? UserNameClaim);
     private record EndpointListDto(Guid Id, string Name, string? Tags, bool IsPublished, int DataStoreConfigurationId, string ConfigurationName, AuthenticationDto? Authentication);
+
+    // Mirrors DataStoresController's export document. Only the fields the preview needs are read
+    // here; the document is posted back as-is so the server sees every field the export produced.
+    private record ExportedTable(string Name, string? Schema, int SyncMode, bool SkipInitialSnapshot, string? SelectIncrementalQuery, string? CustomSnapshotQuery, string? SkipColumns, string? SkipColumnsOnInsertOrUpdate, int IdentityInsert, bool ForceReloadInsertedRecords);
+    private record ExportedEndpoint(string Name, string? Tags, AuthenticationDto? Authentication);
+    private record ExportedConfiguration(string Name, string? Description, int Version, ExportedTable[]? Tables, ExportedEndpoint[]? Endpoints);
+    private record ExportedDataStore(string Name, string? Description, DataStoreType Type);
+    private record DataStoreExportDocument(string Format, int FormatVersion, DateTime ExportedAt, ExportedDataStore DataStore, ExportedConfiguration[]? Configurations);
+    private record ImportResultDto(int ConfigurationsCreated, int TablesImported, int EndpointsCreated);
+
+    // One row of the import dialog: the name is editable so a clash with an existing
+    // configuration can be resolved before the document is sent.
+    private sealed class ImportPreviewItem
+    {
+        public required ExportedConfiguration Source { get; init; }
+        public required string ExportedName { get; init; }
+        public required string Name { get; set; }
+        public int Version => Source.Version;
+        public int TableCount => Source.Tables?.Length ?? 0;
+        public int EndpointCount => Source.Endpoints?.Length ?? 0;
+    }
 
     private bool HasUnsavedChanges =>
         _editName != _savedName
@@ -967,6 +1141,8 @@ else
         _dotNetRef?.Dispose();
         if (_clipboardModule is not null)
             await _clipboardModule.DisposeAsync();
+        if (_downloadModule is not null)
+            await _downloadModule.DisposeAsync();
     }
 
     private async Task LoadConfigurations()
@@ -1362,6 +1538,147 @@ else
     }
 
     // Provision
+    // Export / import
+
+    private async Task ExportConfigurations()
+    {
+        _isExporting = true;
+        _transferSuccessMessage = null;
+        _transferErrorMessages = [];
+
+        try
+        {
+            var response = await Http.GetAsync($"api/datastores/{DataStoreId}/export");
+            if (!response.IsSuccessStatusCode)
+            {
+                _transferErrorMessages = [$"Export failed ({(int)response.StatusCode})."];
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var fileName = $"{SanitizeFileName(_dataStore!.Name)}-configurations.json";
+
+            _downloadModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/download.js");
+            await _downloadModule.InvokeVoidAsync("downloadText", fileName, "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            _transferErrorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(c => invalid.Contains(c) || char.IsWhiteSpace(c) ? '-' : c).ToArray()).Trim('-');
+        return string.IsNullOrEmpty(cleaned) ? "data-store" : cleaned;
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _transferSuccessMessage = null;
+        _transferErrorMessages = [];
+        _importErrorMessages = [];
+        _importDocument = null;
+        _importPreview = [];
+
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var document = await JsonSerializer.DeserializeAsync<DataStoreExportDocument>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+            if (document is null || document.Format != "coresync-datastore-export" || document.DataStore is null)
+            {
+                _transferErrorMessages = ["The selected file is not a data store export."];
+                return;
+            }
+
+            if (document.Configurations is null || document.Configurations.Length == 0)
+            {
+                _transferErrorMessages = ["The export contains no configurations."];
+                return;
+            }
+
+            _importPreview = document.Configurations
+                .Select(c => new ImportPreviewItem { Source = c, ExportedName = c.Name?.Trim() ?? "", Name = c.Name?.Trim() ?? "" })
+                .ToList();
+
+            _importDocument = document;
+            _importIncludeEndpoints = false;
+            _showImportDialog = true;
+        }
+        catch (Exception ex)
+        {
+            _transferErrorMessages = [$"Failed to read file: {ex.Message}"];
+        }
+    }
+
+    private void CloseImportDialog()
+    {
+        _showImportDialog = false;
+        _importDocument = null;
+        _importPreview = [];
+        _importErrorMessages = [];
+    }
+
+    private string? GetImportNameProblem(ImportPreviewItem item)
+    {
+        var name = item.Name.Trim();
+        if (name.Length == 0)
+            return "Name required";
+        if (_configurations?.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)) == true)
+            return "Already exists";
+        if (_importPreview.Any(other => other != item && string.Equals(other.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+            return "Duplicate name";
+        return null;
+    }
+
+    private async Task ConfirmImport()
+    {
+        if (_importDocument is null) return;
+
+        _isImporting = true;
+        _importErrorMessages = [];
+
+        try
+        {
+            var document = _importDocument with
+            {
+                Configurations = _importPreview.Select(i => i.Source with { Name = i.Name.Trim() }).ToArray()
+            };
+            var request = new { Document = document, IncludeEndpoints = _importIncludeEndpoints };
+            var response = await Http.PostAsJsonAsync($"api/datastores/{DataStoreId}/import", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ImportResultDto>();
+                CloseImportDialog();
+                await LoadConfigurations();
+                await LoadEndpoints();
+                _transferSuccessMessage = result is null
+                    ? "Import completed."
+                    : $"Created {result.ConfigurationsCreated} configuration(s) with {result.TablesImported} table(s) and {result.EndpointsCreated} endpoint(s).";
+            }
+            else
+            {
+                var errors = await response.Content.ReadFromJsonAsync<List<string>>();
+                _importErrorMessages = errors ?? ["An unexpected error occurred."];
+            }
+        }
+        catch (Exception ex)
+        {
+            _importErrorMessages = [ex.Message];
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
     private async Task ApplyProvision()
     {
         _isProvisioning = true;
