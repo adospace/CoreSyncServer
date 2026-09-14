@@ -9,7 +9,7 @@ namespace CoreSyncServer.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class DataStoresController(ApplicationDbContext context, ISyncProviderCache syncProviderCache) : ControllerBase
+public partial class DataStoresController(ApplicationDbContext context, ISyncProviderCache syncProviderCache) : ControllerBase
 {
     public record DataStoreDto(
         int Id,
@@ -275,13 +275,7 @@ public class DataStoresController(ApplicationDbContext context, ISyncProviderCac
             e.IsPublished,
             e.DataStoreConfigurationId,
             e.DataStoreConfiguration!.Name,
-            e.Authentication switch
-            {
-                BasicAuthentication b => new EndpointAuthDto((int)EndPointAuthenticationType.Basic, b.Username, b.Password, null, null, null, null, null),
-                ApiKeyAuthentication a => new EndpointAuthDto((int)EndPointAuthenticationType.ApiKey, null, null, a.ApiKey, null, null, null, null),
-                JwtAuthentication j => new EndpointAuthDto((int)EndPointAuthenticationType.Jwt, null, null, null, j.JWKSEndpoint, j.Issuer, j.UserIdClaim, j.UserNameClaim),
-                _ => null
-            })).ToList();
+            MapAuthentication(e.Authentication))).ToList();
 
         return Ok(result);
     }
