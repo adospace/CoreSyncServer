@@ -68,6 +68,8 @@ All configuration can be set via environment variables using the ASP.NET Core do
 | `Maintenance__IntervalMinutes` | `60` | How often cleanup tasks run |
 | `Maintenance__DiagnosticRetentionHours` | `24` | Hours to keep diagnostic records |
 | `Maintenance__SyncTraceRetentionHours` | `24` | Hours to keep sync trace logs |
+| `Maintenance__MaxVerboseTracesPerSession` | `1000` | Verbose trace rows a single sync session may persist; the rest are dropped |
+| `Maintenance__MaxVerboseTraceRows` | `200000` | Ceiling on verbose trace rows across all sessions; oldest are deleted past it |
 | `Maintenance__SyncSessionRetentionDays` | `7` | Days to keep sync session history |
 | `Smtp__Enabled` | `false` | Enable email notifications |
 | `Smtp__Host` | — | SMTP server hostname |

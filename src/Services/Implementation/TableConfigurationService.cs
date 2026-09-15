@@ -133,20 +133,16 @@ public class TableConfigurationService(
             return TableConfigurationResult.Failure($"Unable to connect to the database: {ex.Message}");
         }
 
+        // Sort order is deliberately left alone here. This runs from the schema monitor every few
+        // minutes, and the topological position of a table shifts whenever anything is added to or
+        // removed from the schema; renumbering on every pass made the monitor churn rows and report
+        // faults for what is routine. Sort changes only through Scaffold or the explicit Sort action.
         schemaTables = FilterChangeTrackingTables(schemaTables);
-        var sortResult = tableSorter.Sort(schemaTables);
 
-        var schemaLookup = sortResult.SortedTables.ToDictionary(
+        var schemaLookup = schemaTables.ToDictionary(
             t => (t.Schema?.ToLowerInvariant(), t.Name.ToLowerInvariant()));
 
-        var sortLookup = sortResult.SortedTables
-            .Select((t, i) => (t, i))
-            .ToDictionary(
-                x => (x.t.Schema?.ToLowerInvariant(), x.t.Name.ToLowerInvariant()),
-                x => x.i + 1);
-
         var pendingDiagnostics = new List<DiagnosticItem>();
-        var maxSort = sortLookup.Count;
 
         foreach (var table in config.TableConfigurations)
         {
@@ -157,12 +153,10 @@ public class TableConfigurationService(
                 // Table no longer exists in the database
                 table.InError = true;
                 table.Message = "Table not found in database schema";
-                table.Sort = ++maxSort;
                 pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Table not found in database schema"));
                 continue;
             }
 
-            var newSort = sortLookup[key];
             var messages = new List<string>();
             var hasError = false;
 
@@ -174,14 +168,6 @@ public class TableConfigurationService(
                 pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] {pkError}"));
             }
 
-            if (table.Sort != newSort)
-            {
-                hasError = true;
-                messages.Add($"Sort order changed (was {table.Sort}, now {newSort})");
-                pendingDiagnostics.Add(BuildDiagnostic(config, $"[{table.Name}] Sort order changed (was {table.Sort}, now {newSort})"));
-            }
-
-            table.Sort = newSort;
             table.InError = hasError;
             table.Message = messages.Count > 0 ? string.Join("; ", messages) : null;
             // SyncMode is intentionally not changed — preserve user selection

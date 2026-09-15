@@ -8,12 +8,27 @@ namespace CoreSyncServer.Services.Implementation;
 public class SyncSessionLogger(
     ILogger logger,
     ApplicationDbContext context,
-    int syncSessionId) : ISyncLogger
+    int syncSessionId,
+    int maxVerboseTraces = 1000) : ISyncLogger
 {
+    private int _verboseTraces;
+
     public void Trace(string message)
     {
         logger.LogTrace("{Message}", message);
-        AddTrace(message, TraceLevel.Verbose);
+
+        // Providers trace once per applied row. Persist the first few, which are enough to see
+        // what a session was doing, and drop the rest so one bulk sync cannot fill the table.
+        if (_verboseTraces < maxVerboseTraces)
+        {
+            _verboseTraces++;
+            AddTrace(message, TraceLevel.Verbose);
+        }
+        else if (_verboseTraces == maxVerboseTraces)
+        {
+            _verboseTraces++;
+            AddTrace($"Verbose trace truncated after {maxVerboseTraces} entries.", TraceLevel.Info);
+        }
     }
 
     public void Info(string message)

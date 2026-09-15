@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace CoreSyncServer.Controllers;
@@ -26,6 +27,7 @@ public class SyncController(
     ISyncSessionService syncSessionService,
     ISyncProviderCache syncProviderCache,
     IMemoryCache memoryCache,
+    IOptions<MaintenanceSettings> maintenanceSettings,
     ILogger<SyncController> logger) : ControllerBase
 {
     private class CachedSyncChangeSet
@@ -172,7 +174,7 @@ public class SyncController(
             var dataStoreId = endpoint.DataStoreConfiguration!.DataStoreId;
 
             var session = await syncSessionService.StartAsync(dataStoreId, cancellationToken);
-            var sessionLogger = new SyncSessionLogger(logger, context, session.Id);
+            var sessionLogger = new SyncSessionLogger(logger, context, session.Id, maintenanceSettings.Value.MaxVerboseTracesPerSession);
 
             try
             {
@@ -337,7 +339,7 @@ public class SyncController(
                 }
             }
 
-            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId);
+            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId, maintenanceSettings.Value.MaxVerboseTracesPerSession);
 
             try
             {
@@ -383,7 +385,7 @@ public class SyncController(
         if (memoryCache.TryGetValue(sessionId, out var obj) && obj is CachedUploadSession cached)
         {
             var changeSet = cached.ChangeSet;
-            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId);
+            var sessionLogger = new SyncSessionLogger(logger, context, cached.SyncSessionId, maintenanceSettings.Value.MaxVerboseTracesPerSession);
 
             try
             {
