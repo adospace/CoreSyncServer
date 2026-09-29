@@ -20,8 +20,20 @@ public static class AuthenticatedHttpClientExtensions
         this CustomWebApplicationFactory factory,
         string? userId = null,
         string? userName = null)
+        => factory.CreateAuthenticatedFactory(userId, userName).CreateAuthenticatedClient();
+
+    /// <summary>
+    /// The host an authenticated client talks to. It is a separate host from
+    /// <paramref name="factory"/>, with its own singletons, so a test that needs to see server
+    /// state (e.g. the sync provider cache) must resolve it from here rather than from the
+    /// fixture's <c>Services</c>.
+    /// </summary>
+    public static WebApplicationFactory<Program> CreateAuthenticatedFactory(
+        this CustomWebApplicationFactory factory,
+        string? userId = null,
+        string? userName = null)
     {
-        var client = factory.WithWebHostBuilder(builder =>
+        return factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
@@ -37,7 +49,12 @@ public static class AuthenticatedHttpClientExtensions
                     userId ?? DefaultUserId,
                     userName ?? DefaultUserName));
             });
-        }).CreateClient(new WebApplicationFactoryClientOptions
+        });
+    }
+
+    public static HttpClient CreateAuthenticatedClient(this WebApplicationFactory<Program> authenticatedFactory)
+    {
+        var client = authenticatedFactory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
