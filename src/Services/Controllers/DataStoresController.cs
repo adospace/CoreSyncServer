@@ -231,6 +231,19 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
 
         await context.SaveChangesAsync();
 
+        // Cached providers hold the connection string, tracking mode and change retention they were
+        // built with, and none of those require unpublishing to edit. Drop every endpoint on this
+        // data store so the next sync connects with the saved settings.
+        var endpointIds = await context.Endpoints
+            .Where(e => e.DataStoreConfiguration!.DataStoreId == id)
+            .Select(e => e.Id)
+            .ToListAsync();
+
+        foreach (var endpointId in endpointIds)
+        {
+            syncProviderCache.Invalidate(endpointId);
+        }
+
         return NoContent();
     }
 
@@ -292,8 +305,9 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
         endpoint.IsPublished = request.IsPublished;
         await context.SaveChangesAsync();
 
-        // Drop any cached sync provider so the next sync rebuilds it from the current configuration
-        // (the table config can only change while unpublished, so this toggle is the safe seam).
+        // Drop any cached sync provider so the next sync rebuilds it from the current configuration.
+        // Table rules can only change while unpublished, so this toggle covers them; repointing the
+        // endpoint and editing the data store invalidate on their own.
         syncProviderCache.Invalidate(endpointId);
 
         return NoContent();
@@ -320,6 +334,11 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
 
         endpoint.DataStoreConfigurationId = request.DataStoreConfigurationId;
         await context.SaveChangesAsync();
+
+        // The cached provider was built from the previous configuration's tables. Repointing is
+        // allowed while published (it is how a new configuration goes live), so without this the
+        // endpoint kept serving the old tables until the next publish toggle or restart.
+        syncProviderCache.Invalidate(endpointId);
 
         return NoContent();
     }
