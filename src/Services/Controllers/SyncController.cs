@@ -24,7 +24,7 @@ namespace CoreSyncServer.Controllers;
 /// status code as before, plus the <c>X-CoreSync-Error</c> / <c>X-CoreSync-Trace</c> headers and a
 /// <see cref="SyncErrorDetails"/> body a current client turns into a typed failure. Anything else
 /// propagates to the host (exception handler, Sentry) as it always did, tagged with the same headers
-/// by <see cref="SyncErrorResponseFilter"/>.
+/// by <see cref="SyncErrorResponseFilter"/>. No status code differs from before the headers existed.
 /// </remarks>
 [ApiController]
 [AllowAnonymous]
@@ -184,13 +184,14 @@ public class SyncController(
         => SyncErrorResponses.SessionExpired(HttpContext, sessionId);
 
     /// <summary>
-    /// 503 with the <c>agent-unavailable</c> code: the agent owning the data store is not connected or
-    /// did not answer in time. Transient from the client's point of view.
+    /// The 503 every agent failure has always produced, logged as it always was: <c>agent-unavailable</c>
+    /// when the agent owning the data store is not connected or did not answer in time,
+    /// <c>agent-error</c> when it answered that the operation failed. Both are left retryable.
     /// </summary>
     private ObjectResult AgentOffline(AgentOfflineException ex)
     {
         logger.LogWarning(ex, "Agent offline for DataStore {DataStoreId}", ex.DataStoreId);
-        return SyncErrorResponses.AgentUnavailable(HttpContext, ex.Message);
+        return SyncErrorResponses.AgentFailure(HttpContext, ex);
     }
 
     [HttpGet("changes-bulk/{storeId:guid}")]

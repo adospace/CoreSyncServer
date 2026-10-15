@@ -1,5 +1,6 @@
 using CoreSync;
 using CoreSync.Http;
+using CoreSyncServer.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -31,6 +32,18 @@ public static class SyncErrorResponses
     public static ObjectResult AgentUnavailable(HttpContext httpContext, string message)
         => Create(httpContext, StatusCodes.Status503ServiceUnavailable, SyncHttpErrorCodes.AgentUnavailable, message);
 
+    /// <summary>
+    /// The 503 an agent failure has always produced, with <c>agent-error</c> when the agent answered
+    /// with a failure and <c>agent-unavailable</c> when it did not answer at all. Neither code is
+    /// permanent, so clients keep retrying as they did.
+    /// </summary>
+    public static ObjectResult AgentFailure(HttpContext httpContext, AgentOfflineException exception)
+        => Create(
+            httpContext,
+            StatusCodes.Status503ServiceUnavailable,
+            exception is AgentOperationFailedException ? SyncHttpErrorCodes.AgentError : SyncHttpErrorCodes.AgentUnavailable,
+            exception.Message);
+
     public static ObjectResult ConfigurationError(HttpContext httpContext, string message)
         => Create(httpContext, StatusCodes.Status422UnprocessableEntity, SyncHttpErrorCodes.ConfigurationError, message);
 
@@ -51,20 +64,27 @@ public static class SyncErrorResponses
     }
 
     /// <summary>
-    /// Arranges for the error code and trace headers to be on the response the host produces for an
-    /// exception this API does not handle, without handling it: the exception keeps propagating to
-    /// <c>UseExceptionHandler</c>, the Sentry middleware and the request logger exactly as before.
+    /// Arranges for the error code and trace headers to be on the response the host's exception
+    /// handler produces for an exception this API does not handle, without handling it: the exception
+    /// keeps propagating to <c>UseExceptionHandler</c>, the Sentry middleware and the request logger
+    /// exactly as before.
     /// </summary>
     /// <remarks>
     /// The exception handler middleware clears every header already set when it takes over, so the
     /// headers are added from an <see cref="HttpResponse.OnStarting"/> callback, which it does not
-    /// clear and which runs when its own error response starts.
+    /// clear and which runs when its error response starts. A host without any handler lets Kestrel
+    /// write a bare 500, which runs no OnStarting callbacks: that response carries no header, and the
+    /// status alone still tells the client the server answered. Nothing is registered once the
+    /// response has started, because that would throw and replace the real failure.
     /// </remarks>
     public static void TagUnhandled(HttpContext httpContext, Exception exception)
     {
+        var response = httpContext.Response;
+        if (response.HasStarted)
+            return;
+
         var code = Classify(exception);
         var traceId = httpContext.TraceIdentifier;
-        var response = httpContext.Response;
 
         response.OnStarting(() =>
         {

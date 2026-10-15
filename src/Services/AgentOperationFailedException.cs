@@ -6,21 +6,19 @@ namespace CoreSyncServer.Services;
 /// the on-premise database.
 /// </summary>
 /// <remarks>
-/// Kept apart from <see cref="AgentOfflineException"/> on purpose: that one means "nobody answered",
-/// which is transient and answered with 503, while this one is a failure of the data store behind the
-/// agent and is treated like any other provider failure - it propagates (500, reported to the host's
-/// error reporting) and reaches the client tagged with an error code instead of as "agent offline".
+/// Derives from <see cref="AgentOfflineException"/> and carries the very message that type carried
+/// for this case, so <c>SyncController</c> keeps answering HTTP 503 with the same body and logging
+/// it the same way: a server deployed ahead of its clients must look identical to them. What it adds
+/// is the distinction itself, which the controller turns into the <c>agent-error</c> code header so
+/// that a current client no longer reads an agent-side failure as "agent offline".
 /// </remarks>
-public class AgentOperationFailedException : Exception
+public class AgentOperationFailedException : AgentOfflineException
 {
-    public int DataStoreId { get; }
-
     public string Operation { get; }
 
     public AgentOperationFailedException(int dataStoreId, string operation, Exception inner)
-        : base($"Agent for DataStore {dataStoreId} reported a failure executing '{operation}': {inner.Message}", inner)
+        : base(dataStoreId, $"Agent RPC '{operation}' failed for DataStore {dataStoreId}.", inner)
     {
-        DataStoreId = dataStoreId;
         Operation = operation;
     }
 }

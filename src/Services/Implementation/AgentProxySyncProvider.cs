@@ -1,4 +1,4 @@
-using CoreSync;
+﻿using CoreSync;
 using CoreSyncServer.Agent.Contracts;
 using CoreSyncServer.Services.Hubs;
 using Microsoft.AspNetCore.SignalR;
@@ -17,7 +17,8 @@ namespace CoreSyncServer.Services.Implementation;
 /// or the RPC did not complete (timeout, dropped connection), and
 /// <see cref="AgentOperationFailedException"/> when the agent answered with an error - SignalR
 /// surfaces the agent handler's exception as a <see cref="HubException"/> - which is a failure of
-/// the data store behind it, not of its availability.
+/// the data store behind it, not of its availability. The latter derives from the former, so the
+/// controller answers both with the 503 it always did; only the error code header differs.
 /// </para>
 /// </summary>
 internal sealed class AgentProxySyncProvider : ISyncProvider
@@ -61,7 +62,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         }
         catch (HubException ex)
         {
-            // The agent answered: its provider failed. Not an availability problem.
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
             throw new AgentOperationFailedException(_dataStoreId, "SyncGetStoreId", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
@@ -79,7 +80,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         }
         catch (HubException ex)
         {
-            // The agent answered: its provider failed. Not an availability problem.
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
             throw new AgentOperationFailedException(_dataStoreId, "SyncGetSyncVersion", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
@@ -108,7 +109,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         }
         catch (HubException ex)
         {
-            // The agent answered: its provider failed. Not an availability problem.
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
             throw new AgentOperationFailedException(_dataStoreId, "SyncGetChanges", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
@@ -137,7 +138,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         }
         catch (HubException ex)
         {
-            // The agent answered: its provider failed. Not an availability problem.
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
             throw new AgentOperationFailedException(_dataStoreId, "SyncApplyChanges", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
@@ -155,7 +156,7 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         }
         catch (HubException ex)
         {
-            // The agent answered: its provider failed. Not an availability problem.
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
             throw new AgentOperationFailedException(_dataStoreId, "SyncSaveVersionForStore", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
