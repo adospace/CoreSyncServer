@@ -2,7 +2,9 @@ namespace CoreSyncServer.Services;
 
 /// <summary>
 /// Thrown by <c>AgentProxySyncProvider</c> when no agent connection is registered for the target DataStore,
-/// or the RPC call to the connected agent fails. <c>SyncController</c> maps this to HTTP 503.
+/// or the RPC call to the connected agent does not complete (timeout, dropped connection).
+/// <c>SyncController</c> maps this to HTTP 503 with the <c>agent-unavailable</c> code.
+/// An agent that answers with an error raises <see cref="AgentOperationFailedException"/> instead.
 /// </summary>
 public class AgentOfflineException : Exception
 {

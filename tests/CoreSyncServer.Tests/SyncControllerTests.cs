@@ -1,4 +1,5 @@
 using CoreSync;
+using CoreSync.Http;
 using CoreSync.Http.Client;
 using CoreSync.Sqlite;
 using CoreSyncServer.Data;
@@ -7,6 +8,8 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace CoreSyncServer.Tests;
 
@@ -219,14 +222,145 @@ public class SyncControllerTests : IClassFixture<InMemoryWebApplicationFactory>,
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
     }
 
-    private ISyncProviderHttpClient CreateRemoteSyncClient()
+    // The sync API answers the failures it recognises with the status code it always used plus the
+    // X-CoreSync-Error / X-CoreSync-Trace headers and a SyncErrorDetails body, so a current client can
+    // tell the user what happened while an older one keeps seeing the status it expects.
+
+    [Fact]
+    public async Task Sync_InvalidEndpoint_CarriesEndpointNotFoundSignal()
+    {
+        var httpClient = _factory.CreateClient();
+
+        var response = await httpClient.GetAsync($"api/sync/{Guid.NewGuid()}/store-id");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle().Which.Should().Be(SyncHttpErrorCodes.EndpointNotFound);
+        response.Headers.GetValues(SyncHttpHeaders.TraceId).Should().ContainSingle().Which.Should().NotBeNullOrWhiteSpace();
+
+        // A JSON body, not the host's HTML not-found page the status code pages would otherwise serve
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
+        var details = await response.Content.ReadFromJsonAsync<SyncErrorDetails>();
+        details!.Code.Should().Be(SyncHttpErrorCodes.EndpointNotFound);
+        details.TraceId.Should().Be(response.Headers.GetValues(SyncHttpHeaders.TraceId).Single());
+    }
+
+    [Fact]
+    public async Task Sync_UnpublishedEndpoint_CarriesEndpointNotFoundSignal()
+    {
+        Guid unpublishedId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var config = await db.DataStoreConfigurations.FirstAsync();
+            var endpoint = new Endpoint { Id = Guid.NewGuid(), Name = "Draft", DataStoreConfigurationId = config.Id, IsPublished = false };
+            db.Endpoints.Add(endpoint);
+            await db.SaveChangesAsync();
+            unpublishedId = endpoint.Id;
+        }
+
+        var response = await _factory.CreateClient().GetAsync($"api/sync/{unpublishedId}/store-id");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle(SyncHttpErrorCodes.EndpointNotFound);
+    }
+
+    [Fact]
+    public async Task Sync_UnknownDownloadSession_CarriesSessionExpiredSignal()
+    {
+        var response = await _factory.CreateClient().GetAsync($"api/sync/{_endpointId}/changes-bulk-item/{Guid.NewGuid()}/0/50");
+
+        // Still a 404 - that is what an older client has always received here - but no longer
+        // indistinguishable from an unknown endpoint
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle(SyncHttpErrorCodes.SessionExpired);
+
+        var details = await response.Content.ReadFromJsonAsync<SyncErrorDetails>();
+        details!.Code.Should().Be(SyncHttpErrorCodes.SessionExpired);
+        details.Message.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Sync_UnknownUploadSession_CarriesSessionExpiredSignal()
+    {
+        var httpClient = _factory.CreateClient();
+
+        var complete = await httpClient.PostAsync($"api/sync/{_endpointId}/changes-bulk-complete/{Guid.NewGuid()}", null);
+        complete.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        complete.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle(SyncHttpErrorCodes.SessionExpired);
+
+        var item = await httpClient.PostAsJsonAsync($"api/sync/{_endpointId}/changes-bulk-item", new BulkChangeSetUploadItem { SessionId = Guid.NewGuid(), Items = [] });
+        item.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        item.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle(SyncHttpErrorCodes.SessionExpired);
+    }
+
+    [Fact]
+    public async Task Sync_UnknownEndpoint_IsReportedAsConfigurationErrorByTheAgent()
+    {
+        var remoteSyncClient = CreateRemoteSyncClient(Guid.NewGuid());
+        var localProvider = CreateSqliteSyncProvider(_localDbPath, ProviderMode.Local);
+
+        var syncAgent = new SyncAgent(localProvider, remoteSyncClient);
+        var act = () => syncAgent.SynchronizeAsync();
+
+        var ex = (await act.Should().ThrowAsync<SynchronizationException>()).Which;
+
+        // What the app can now tell the user, and what it could before (an HttpRequestException)
+        ex.Kind.Should().Be(SyncFailureKind.ConfigurationError);
+        ex.Stage.Should().Be(SynchronizationStage.RemoteStoreId);
+        ex.ErrorCode.Should().Be(SyncHttpErrorCodes.EndpointNotFound);
+        ex.TraceId.Should().NotBeNullOrWhiteSpace();
+        ex.ServerMessage.Should().Contain("not published");
+        ex.InnerException.Should().BeAssignableTo<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task Sync_ProviderFailure_TagsTheHostErrorResponse()
+    {
+        // An endpoint whose configuration names a table the database does not have: the provider
+        // throws, the exception propagates to the host's exception handler as before (Sentry still
+        // sees it), and the response it produces carries the error code and trace headers.
+        Guid brokenEndpointId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dataStore = await db.DataStores.FirstAsync();
+
+            var config = new DataStoreConfiguration { Name = "Broken Config", DataStoreId = dataStore.Id };
+            db.DataStoreConfigurations.Add(config);
+            await db.SaveChangesAsync();
+
+            config.TableConfigurations.Add(new DataStoreTableConfiguration
+            {
+                Name = "MissingTable",
+                SyncMode = DataStoreTableConfigurationSyncMode.UploadAndDownload,
+                Sort = 0,
+                DataStoreConfigurationId = config.Id
+            });
+            await db.SaveChangesAsync();
+
+            var endpoint = new Endpoint { Id = Guid.NewGuid(), Name = "Broken Endpoint", DataStoreConfigurationId = config.Id, IsPublished = true };
+            db.Endpoints.Add(endpoint);
+            await db.SaveChangesAsync();
+            brokenEndpointId = endpoint.Id;
+        }
+
+        var response = await _factory.CreateClient().GetAsync($"api/sync/{brokenEndpointId}/changes-bulk/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        response.Headers.GetValues(SyncHttpHeaders.ErrorCode).Should().ContainSingle(SyncHttpErrorCodes.ServerError);
+        response.Headers.GetValues(SyncHttpHeaders.TraceId).Should().ContainSingle().Which.Should().NotBeNullOrWhiteSpace();
+    }
+
+    private ISyncProviderHttpClient CreateRemoteSyncClient() => CreateRemoteSyncClient(_endpointId);
+
+    private ISyncProviderHttpClient CreateRemoteSyncClient(Guid endpointId)
     {
         var httpClient = _factory.CreateClient();
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new TestHttpClientFactory(httpClient));
         services.AddCoreSyncHttpClient(options =>
         {
-            options.SyncControllerRoute = $"api/sync/{_endpointId}";
+            options.SyncControllerRoute = $"api/sync/{endpointId}";
             options.BulkItemSize = 50;
         });
         var sp = services.BuildServiceProvider();

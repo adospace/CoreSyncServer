@@ -68,7 +68,10 @@ namespace CoreSyncServer.Services
             services.AddScoped<ISyncEndpointAuthService, SyncEndpointAuthService>();
 
             services.AddScoped<SyncEndpointAuthFilter>();
+#pragma warning disable CS0618 // kept registered for hosts that still reference it
             services.AddScoped<CoreSyncServer.Filters.SyncConfigurationExceptionFilter>();
+#pragma warning restore CS0618
+            services.AddScoped<CoreSyncServer.Filters.SyncErrorResponseFilter>();
 
             services.AddScoped<CoreSyncServer.Filters.AgentApiKeyAuthFilter>();
             services.AddSingleton<IAgentConnectionTicketService, Implementation.AgentConnectionTicketService>();

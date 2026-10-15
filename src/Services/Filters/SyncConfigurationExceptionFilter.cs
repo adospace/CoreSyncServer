@@ -11,6 +11,12 @@ namespace CoreSyncServer.Filters;
 /// 422 Unprocessable Entity response carrying the provider's message, instead of letting them
 /// surface to the sync client as an opaque HTTP 500.
 /// </summary>
+/// <remarks>
+/// Superseded by <see cref="SyncErrorResponseFilter"/>, which answers the same 422 with the
+/// <c>configuration-error</c> code and a <see cref="CoreSync.Http.SyncErrorDetails"/> body and also
+/// tags every other failure. Kept registered so hosts that reference it keep compiling.
+/// </remarks>
+[Obsolete("Use SyncErrorResponseFilter, which covers this case and every other sync failure.")]
 public class SyncConfigurationExceptionFilter(ILogger<SyncConfigurationExceptionFilter> logger) : IExceptionFilter
 {
     public void OnException(ExceptionContext context)
