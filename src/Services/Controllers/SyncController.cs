@@ -16,11 +16,21 @@ using System.Text.Json;
 
 namespace CoreSyncServer.Controllers;
 
+/// <summary>
+/// The CoreSync HTTP wire protocol, served per published endpoint.
+/// </summary>
+/// <remarks>
+/// Failures the controller recognises are answered through <see cref="SyncErrorResponses"/>: the same
+/// status code as before, plus the <c>X-CoreSync-Error</c> / <c>X-CoreSync-Trace</c> headers and a
+/// <see cref="SyncErrorDetails"/> body a current client turns into a typed failure. Anything else
+/// propagates to the host (exception handler, Sentry) as it always did, tagged with the same headers
+/// by <see cref="SyncErrorResponseFilter"/>. No status code differs from before the headers existed.
+/// </remarks>
 [ApiController]
 [AllowAnonymous]
 [Route("api/sync/{endpointId:guid}")]
 [ServiceFilter(typeof(SyncEndpointAuthFilter))]
-[ServiceFilter(typeof(SyncConfigurationExceptionFilter))]
+[ServiceFilter(typeof(SyncErrorResponseFilter))]
 public class SyncController(
     ApplicationDbContext context,
     ISyncProviderFactory syncProviderFactory,
@@ -132,7 +142,7 @@ public class SyncController(
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return EndpointNotFound(endpointId);
         }
         catch (AgentOfflineException ex)
         {
@@ -151,7 +161,7 @@ public class SyncController(
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return EndpointNotFound(endpointId);
         }
         catch (AgentOfflineException ex)
         {
@@ -159,10 +169,29 @@ public class SyncController(
         }
     }
 
+    /// <summary>
+    /// 404 with the <c>endpoint-not-found</c> code: the status an unknown endpoint always produced,
+    /// now distinguishable from an expired session, which is also a 404.
+    /// </summary>
+    private ObjectResult EndpointNotFound(Guid endpointId)
+        => SyncErrorResponses.EndpointNotFound(HttpContext, endpointId);
+
+    /// <summary>
+    /// 404 with the <c>session-expired</c> code: the status an unknown upload/download session always
+    /// produced. The client is told to start a new synchronization rather than retry the request.
+    /// </summary>
+    private ObjectResult SessionExpired(Guid sessionId)
+        => SyncErrorResponses.SessionExpired(HttpContext, sessionId);
+
+    /// <summary>
+    /// The 503 every agent failure has always produced, logged as it always was: <c>agent-unavailable</c>
+    /// when the agent owning the data store is not connected or did not answer in time,
+    /// <c>agent-error</c> when it answered that the operation failed. Both are left retryable.
+    /// </summary>
     private ObjectResult AgentOffline(AgentOfflineException ex)
     {
         logger.LogWarning(ex, "Agent offline for DataStore {DataStoreId}", ex.DataStoreId);
-        return StatusCode(StatusCodes.Status503ServiceUnavailable, ex.Message);
+        return SyncErrorResponses.AgentFailure(HttpContext, ex);
     }
 
     [HttpGet("changes-bulk/{storeId:guid}")]
@@ -215,7 +244,7 @@ public class SyncController(
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return EndpointNotFound(endpointId);
         }
         catch (AgentOfflineException ex)
         {
@@ -242,7 +271,7 @@ public class SyncController(
             return Ok(bufferList);
         }
 
-        return NotFound();
+        return SessionExpired(sessionId);
     }
 
     [HttpGet("changes-bulk-item-binary/{sessionId:guid}/{skip:int}/{take:int}")]
@@ -265,7 +294,7 @@ public class SyncController(
             return File(bytes, "application/x-msgpack");
         }
 
-        return NotFound();
+        return SessionExpired(sessionId);
     }
 
     [HttpPost("changes-bulk-begin")]
@@ -288,7 +317,7 @@ public class SyncController(
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return EndpointNotFound(endpointId);
         }
     }
 
@@ -301,7 +330,7 @@ public class SyncController(
             return Ok();
         }
 
-        return NotFound();
+        return SessionExpired(bulkUploadItem.SessionId);
     }
 
     [HttpPost("changes-bulk-item-binary")]
@@ -319,7 +348,7 @@ public class SyncController(
             return Ok();
         }
 
-        return NotFound();
+        return SessionExpired(bulkUploadItem.SessionId);
     }
 
     [HttpPost("changes-bulk-complete/{sessionId:guid}")]
@@ -360,7 +389,7 @@ public class SyncController(
                 // Cleanup on CancellationToken.None — see GetBulkChangeSet for the rationale.
                 await sessionLogger.FlushAsync(CancellationToken.None);
                 await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", CancellationToken.None);
-                return NotFound();
+                return EndpointNotFound(endpointId);
             }
             catch (AgentOfflineException ex)
             {
@@ -376,7 +405,7 @@ public class SyncController(
             }
         }
 
-        return NotFound();
+        return SessionExpired(sessionId);
     }
 
     [HttpPost("changes-bulk-complete-binary/{sessionId:guid}")]
@@ -406,7 +435,7 @@ public class SyncController(
                 // Cleanup on CancellationToken.None — see GetBulkChangeSet for the rationale.
                 await sessionLogger.FlushAsync(CancellationToken.None);
                 await syncSessionService.ErrorAsync(cached.SyncSessionId, $"Endpoint '{endpointId}' not found.", CancellationToken.None);
-                return NotFound();
+                return EndpointNotFound(endpointId);
             }
             catch (AgentOfflineException ex)
             {
@@ -422,7 +451,7 @@ public class SyncController(
             }
         }
 
-        return NotFound();
+        return SessionExpired(sessionId);
     }
 
     [HttpPost("save-version/{storeId:guid}/{version:long}")]
@@ -439,7 +468,7 @@ public class SyncController(
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return EndpointNotFound(endpointId);
         }
         catch (AgentOfflineException ex)
         {

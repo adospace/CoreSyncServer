@@ -29,15 +29,11 @@ public class SyncEndpointAuthFilter(
             .Include(e => e.Authentication)
             .FirstOrDefaultAsync(e => e.Id == endpointId, filterContext.HttpContext.RequestAborted);
 
-        if (endpoint is null)
+        // Same 404 as before, now carrying the endpoint-not-found code and a body: without a body the
+        // host's status code pages would replace it with the HTML not-found page.
+        if (endpoint is null || !endpoint.IsPublished)
         {
-            filterContext.Result = new NotFoundResult();
-            return;
-        }
-
-        if (!endpoint.IsPublished)
-        {
-            filterContext.Result = new NotFoundResult();
+            filterContext.Result = SyncErrorResponses.EndpointNotFound(filterContext.HttpContext, endpointId);
             return;
         }
 

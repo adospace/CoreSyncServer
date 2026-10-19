@@ -1,4 +1,4 @@
-using CoreSync;
+﻿using CoreSync;
 using CoreSyncServer.Agent.Contracts;
 using CoreSyncServer.Services.Hubs;
 using Microsoft.AspNetCore.SignalR;
@@ -12,6 +12,14 @@ namespace CoreSyncServer.Services.Implementation;
 /// Analogous to <c>CoreSync.Http.Client</c>'s <c>SyncProviderHttpClient</c>, but over the
 /// persistent agent connection rather than HTTP. Provisioning and retention APIs are out of
 /// scope for the initial iteration and throw <see cref="NotSupportedException"/>.
+/// <para>
+/// Two failure shapes are told apart: <see cref="AgentOfflineException"/> when no agent is connected
+/// or the RPC did not complete (timeout, dropped connection), and
+/// <see cref="AgentOperationFailedException"/> when the agent answered with an error - SignalR
+/// surfaces the agent handler's exception as a <see cref="HubException"/> - which is a failure of
+/// the data store behind it, not of its availability. The latter derives from the former, so the
+/// controller answers both with the 503 it always did; only the error code header differs.
+/// </para>
 /// </summary>
 internal sealed class AgentProxySyncProvider : ISyncProvider
 {
@@ -52,6 +60,11 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         {
             return await client.SyncGetStoreId(_tables).WaitAsync(RpcTimeout, cancellationToken);
         }
+        catch (HubException ex)
+        {
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
+            throw new AgentOperationFailedException(_dataStoreId, "SyncGetStoreId", ex);
+        }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
             throw new AgentOfflineException(_dataStoreId, $"Agent RPC 'SyncGetStoreId' failed for DataStore {_dataStoreId}.", ex);
@@ -64,6 +77,11 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         try
         {
             return await client.SyncGetSyncVersion(_tables).WaitAsync(RpcTimeout, cancellationToken);
+        }
+        catch (HubException ex)
+        {
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
+            throw new AgentOperationFailedException(_dataStoreId, "SyncGetSyncVersion", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
@@ -89,6 +107,11 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
             SyncPayloadConverter.NormalizeChangeSet(changeSet);
             return changeSet;
         }
+        catch (HubException ex)
+        {
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
+            throw new AgentOperationFailedException(_dataStoreId, "SyncGetChanges", ex);
+        }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
             throw new AgentOfflineException(_dataStoreId, $"Agent RPC 'SyncGetChanges' failed for DataStore {_dataStoreId}.", ex);
@@ -113,6 +136,11 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
             return await client.SyncApplyChanges(changeSet, updateResolution, deleteResolution, _tables)
                 .WaitAsync(RpcTimeout, cancellationToken);
         }
+        catch (HubException ex)
+        {
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
+            throw new AgentOperationFailedException(_dataStoreId, "SyncApplyChanges", ex);
+        }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
             throw new AgentOfflineException(_dataStoreId, $"Agent RPC 'SyncApplyChanges' failed for DataStore {_dataStoreId}.", ex);
@@ -125,6 +153,11 @@ internal sealed class AgentProxySyncProvider : ISyncProvider
         try
         {
             await client.SyncSaveVersionForStore(otherStoreId, version, _tables).WaitAsync(RpcTimeout, cancellationToken);
+        }
+        catch (HubException ex)
+        {
+            // The agent answered: its provider failed. Same 503 as before, told apart by its code.
+            throw new AgentOperationFailedException(_dataStoreId, "SyncSaveVersionForStore", ex);
         }
         catch (Exception ex) when (ex is not AgentOfflineException and not OperationCanceledException)
         {
