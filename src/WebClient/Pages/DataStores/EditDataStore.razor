@@ -157,6 +157,13 @@ else
                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dusk-blue-500 focus:border-dusk-blue-500 outline-none transition-colors" />
                                 <p class="mt-1 text-xs text-gray-500">How long change history is kept. A client offline longer than this must reset its local database and re-sync from scratch. Longer retention grows the change tracking side tables.</p>
                             </div>
+                            <label class="md:col-span-2 flex items-start gap-2 cursor-pointer">
+                                <input type="checkbox" @bind="_editDiscardOrphanedChanges" class="mt-0.5 rounded border-gray-300 text-dusk-blue-500 focus:ring-dusk-blue-500" />
+                                <span class="text-sm text-gray-700">
+                                    Discard uploads orphaned by server deletes
+                                    <span class="block text-xs text-gray-500">When a client uploads rows under a parent that was deleted here after its last sync (for example a sample added offline to a survey deleted on the server), drop those rows and accept the rest of the upload instead of failing it on every retry. The client then removes its copies when it downloads the delete. Each dropped row is logged as a warning. Any other constraint error still fails the upload.</span>
+                                </span>
+                            </label>
                         }
                         break;
 
@@ -923,6 +930,7 @@ else
     private bool _showConnectionString;
     private SqlServerDataStoreTrackingMode _editTrackingMode;
     private int _editChangeRetentionDays = DefaultChangeRetentionDays;
+    private bool _editDiscardOrphanedChanges;
     private int _editAgentId;
     private string _savedName = "";
     private string _savedDescription = "";
@@ -930,6 +938,7 @@ else
     private string _savedConnectionString = "";
     private SqlServerDataStoreTrackingMode _savedTrackingMode;
     private int _savedChangeRetentionDays = DefaultChangeRetentionDays;
+    private bool _savedDiscardOrphanedChanges;
     private int _savedAgentId;
     private List<AgentOptionDto>? _agentOptions;
     private bool _isSavingDetail;
@@ -1027,7 +1036,7 @@ else
 
     private const int DefaultChangeRetentionDays = 30;
 
-    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode, int? ChangeRetentionDays, int? AgentId, string? AgentName);
+    private record DataStoreDetailDto(int Id, string Name, string? Description, DataStoreType Type, string ProjectName, int ProjectId, bool IsMonitorEnabled, string? FilePath, string? ConnectionString, SqlServerDataStoreTrackingMode? TrackingMode, int? ChangeRetentionDays, int? AgentId, string? AgentName, bool? DiscardOrphanedChanges);
     private record AgentOptionDto(int Id, string Name, bool Enabled, DateTime? LastSeen, bool IsConnected);
     private record ChangeRetentionResultDto(bool Success, string? Error, int? EffectiveRetention, string? EffectiveRetentionUnit, bool? EffectiveAutoCleanup);
     private record ConfigurationListDto(int Id, string Name, string? Description, int Version, int TableConfigCount, int EndpointCount, bool InError);
@@ -1062,6 +1071,7 @@ else
         || _editConnectionString != _savedConnectionString
         || _editTrackingMode != _savedTrackingMode
         || _editChangeRetentionDays != _savedChangeRetentionDays
+        || _editDiscardOrphanedChanges != _savedDiscardOrphanedChanges
         || _editAgentId != _savedAgentId;
 
     protected override async Task OnInitializedInteractiveAsync()
@@ -1086,6 +1096,7 @@ else
             _editConnectionString = _savedConnectionString = _dataStore.ConnectionString ?? "";
             _editTrackingMode = _savedTrackingMode = _dataStore.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking;
             _editChangeRetentionDays = _savedChangeRetentionDays = _dataStore.ChangeRetentionDays ?? DefaultChangeRetentionDays;
+            _editDiscardOrphanedChanges = _savedDiscardOrphanedChanges = _dataStore.DiscardOrphanedChanges ?? false;
             _editAgentId = _savedAgentId = _dataStore.AgentId ?? 0;
         }
     }
@@ -1214,6 +1225,7 @@ else
                 ConnectionString = _dataStore.Type is DataStoreType.SqlServer or DataStoreType.PostgreSQL ? _editConnectionString.Trim() : (string?)null,
                 TrackingMode = _dataStore.Type == DataStoreType.SqlServer ? _editTrackingMode : (SqlServerDataStoreTrackingMode?)null,
                 ChangeRetentionDays = _dataStore.Type == DataStoreType.SqlServer ? _editChangeRetentionDays : (int?)null,
+                DiscardOrphanedChanges = _dataStore.Type == DataStoreType.SqlServer ? _editDiscardOrphanedChanges : (bool?)null,
                 AgentId = _editAgentId > 0 ? _editAgentId : (int?)null
             };
 

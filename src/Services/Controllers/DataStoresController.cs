@@ -59,7 +59,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
         string? FilePath,
         string? ConnectionString,
         SqlServerDataStoreTrackingMode? TrackingMode,
-        int? ChangeRetentionDays);
+        int? ChangeRetentionDays,
+        bool? DiscardOrphanedChanges = null);
 
     /// <summary>
     /// The widest change retention the UI accepts. SQL Server itself allows more, but a window this
@@ -104,7 +105,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
                 Type = DataStoreType.SqlServer,
                 ConnectionString = request.ConnectionString ?? "",
                 TrackingMode = request.TrackingMode ?? SqlServerDataStoreTrackingMode.ChangeTracking,
-                ChangeRetentionDays = request.ChangeRetentionDays ?? SqlServerDataStore.DefaultChangeRetentionDays
+                ChangeRetentionDays = request.ChangeRetentionDays ?? SqlServerDataStore.DefaultChangeRetentionDays,
+                DiscardOrphanedChanges = request.DiscardOrphanedChanges ?? false
             },
             DataStoreType.PostgreSQL => new PostgreSqlDataStore
             {
@@ -145,7 +147,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
         SqlServerDataStoreTrackingMode? TrackingMode,
         int? ChangeRetentionDays,
         int? AgentId,
-        string? AgentName);
+        string? AgentName,
+        bool? DiscardOrphanedChanges);
 
     [HttpGet("{id}")]
     public async Task<ActionResult<DataStoreDetailDto>> GetById(int id)
@@ -171,7 +174,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
             (dataStore as SqlServerDataStore)?.TrackingMode,
             (dataStore as SqlServerDataStore)?.ChangeRetentionDays,
             dataStore.AgentId,
-            dataStore.Agent?.Name));
+            dataStore.Agent?.Name,
+            (dataStore as SqlServerDataStore)?.DiscardOrphanedChanges));
     }
 
     public record UpdateDataStoreRequest(
@@ -181,7 +185,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
         string? ConnectionString,
         SqlServerDataStoreTrackingMode? TrackingMode,
         int? ChangeRetentionDays,
-        int? AgentId);
+        int? AgentId,
+        bool? DiscardOrphanedChanges = null);
 
     [HttpPut("{id}")]
     public async Task<ActionResult> Update(int id, [FromBody] UpdateDataStoreRequest request)
@@ -222,6 +227,8 @@ public partial class DataStoresController(ApplicationDbContext context, ISyncPro
                     sqlServer.TrackingMode = request.TrackingMode.Value;
                 if (request.ChangeRetentionDays.HasValue)
                     sqlServer.ChangeRetentionDays = request.ChangeRetentionDays.Value;
+                if (request.DiscardOrphanedChanges.HasValue)
+                    sqlServer.DiscardOrphanedChanges = request.DiscardOrphanedChanges.Value;
                 break;
             case PostgreSqlDataStore postgres:
                 if (request.ConnectionString is not null)

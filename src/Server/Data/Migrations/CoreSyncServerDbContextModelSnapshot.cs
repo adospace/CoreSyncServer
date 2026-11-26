@@ -17,7 +17,7 @@ namespace CoreSyncServer.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -649,6 +649,9 @@ namespace CoreSyncServer.Data.Migrations
                     b.Property<string>("ConnectionString")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("DiscardOrphanedChanges")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("TrackingMode")
                         .HasColumnType("integer");
