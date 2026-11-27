@@ -82,6 +82,14 @@ public class SqlServerDataStore : DataStore
     /// Ignored for the trigger-based tracking mode, which keeps its own journal.
     /// </summary>
     public int ChangeRetentionDays { get; set; } = DefaultChangeRetentionDays;
+
+    /// <summary>
+    /// When <c>true</c>, rows a client uploads under a parent that was deleted on this store after the
+    /// client last synchronized are discarded (and logged) instead of failing the whole upload, so the
+    /// client can download the delete and drop its copies. Off by default: turn it on only when losing
+    /// those rows is the intended outcome of the delete. Applies to the change tracking mode only.
+    /// </summary>
+    public bool DiscardOrphanedChanges { get; set; }
 }
 
 public class PostgreSqlDataStore : DataStore

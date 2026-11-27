@@ -98,6 +98,9 @@ internal class SyncProviderFactory(
         // databases being provisioned for the first time and silently do nothing everywhere else.
         builder.ChangeRetention(dataStore.ChangeRetentionDays);
 
+        // Opt-in per data store: see SqlServerCTSyncConfigurationBuilder.DiscardOrphanedChanges.
+        builder.DiscardOrphanedChanges(dataStore.DiscardOrphanedChanges);
+
         foreach (var table in tables)
         {
             builder.Table(table.Name,
